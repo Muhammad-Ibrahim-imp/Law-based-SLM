@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+checkpoints/
+data/raw/
+data/processed/
+
+*.pt
+*.pth
+*.ckpt
+
+.vscode/
+.idea/
+.DS_Store
