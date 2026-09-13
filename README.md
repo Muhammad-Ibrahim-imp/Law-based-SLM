@@ -11,6 +11,7 @@ A from-scratch decoder-only language model project built by a three-member team.
 - Hardware target: NVIDIA B200
 - Architecture: decoder-only Transformer
 - Training objective: next-token prediction
+- Vocabulary Size: 32,000 tokens
 
 ## Team Responsibilities
 
