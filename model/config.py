@@ -6,6 +6,10 @@ class ModelConfig:
     vocab_size: int = 32000
     max_seq_len: int = 8192
 
+    pad_id: int = 0
+    bos_id: int = 1
+    eos_id: int = 2
+
     # Transformer
     d_model: int = 1280
     n_layers: int = 24
