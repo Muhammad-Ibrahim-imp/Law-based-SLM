@@ -5,6 +5,7 @@ from model.config import ModelConfig
 from model.embeddings import LanguageModelHead, TokenEmbedding
 from model.rmsnorm import RMSNorm
 from model.transformer_block import TransformerBlock
+from model.initialization import initialize_model
 
 class DecoderLM(nn.Module):
     def __init__(self, config: ModelConfig):
@@ -17,11 +18,10 @@ class DecoderLM(nn.Module):
         if config.tie_embeddings:
             self.lm_head = LanguageModelHead(self.embedding.embedding)
         else:
-            self.lm_head = LanguageModelHead(
-                nn.Linear(
+            self.lm_head = nn.Linear(
                     config.d_model, config.vocab_size, bias = config.bias
                 )
-            )
+        initialize_model(self,config)
     def forward(self, input_ids: torch.Tensor, position_offset: int = 0) -> torch.Tensor:
         x = self.embedding(input_ids)
         for layer in self.layers:
