@@ -18,19 +18,19 @@ def adamw(model: nn.Module,
         else:
             no_decay_params.append(param)
 
-        optimzer = torch.optim.AdamW([
-                {
-                "params": decay_params,
-                "weight_decay": weight_decay,
-                },
-                {
-                "params": no_decay_params,
-                "weight_decay": weight_decay,
-                }
-            ],
-            lr=learning_rate,
-            weight_decay=weight_decay,
-            betas=betas,
-            eps=eps)
+    optimzer = torch.optim.AdamW([
+            {
+            "params": decay_params,
+            "weight_decay": weight_decay,
+            },
+            {
+            "params": no_decay_params,
+            "weight_decay": weight_decay,
+            }
+        ],
+        lr=learning_rate,
+        weight_decay=weight_decay,
+        betas=betas,
+        eps=eps)
 
     return optimzer
