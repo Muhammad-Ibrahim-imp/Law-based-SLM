@@ -12,7 +12,7 @@ def test_encode_decode_roundtrip():
 def test_special_token_ids_exist():
     tok = BPETokenizer()
     assert tok.eos_id is not None
-    assert tok.vocab_size > 4
+    assert tok.vocab_size > 100
 #   Disabled the following assertion as the training data is limited right now
-#    assert tok.vocab_size == 32000
+#    assert tok.vocab_size == 32000 
 
