@@ -5,6 +5,7 @@ from training.loss import causal_language_model_loss
 from training.gradient import clip_gradients
 from training.checkpoint import (save_checkpoint as save_training_checkpoint,
                                  load_checkpoint as load_training_checkpoint)
+from training.batch import validate_batch
 
 class Trainer:
     def __init__(self,
@@ -26,15 +27,12 @@ class Trainer:
         self.micro_step = 0
         self.global_step = 0
         self.optimizer.zero_grad(set_to_none=True)
-    def train_step(self,
-                   inputs: torch.Tensor,
-                   labels: torch.Tensor,
-                   ):
-
+    def train_step(self,batch):
+        validate_batch(batch)
         self.model.train()
 
-        inputs = inputs.to(self.device)
-        labels = labels.to(self.device)
+        inputs = batch["input_ids"].to(self.device)
+        labels = batch["labels"].to(self.device)
 
         with torch.autocast(device_type=self.device.type,
                         dtype=torch.bfloat16):
