@@ -3,7 +3,8 @@ import torch.nn as nn
 
 from training.loss import causal_language_model_loss
 from training.gradient import clip_gradients
-from training.checkpoint import save_checkpoint as save_training_checkpoint
+from training.checkpoint import (save_checkpoint as save_training_checkpoint,
+                                 load_checkpoint as load_training_checkpoint)
 
 class Trainer:
     def __init__(self,
@@ -78,3 +79,11 @@ class Trainer:
                                  self.scheduler, self.global_step,
                                  self.micro_step, model_config,
                                  training_config, metadata)
+    def load_checkpoint(self, path):
+        checkpoint = load_training_checkpoint(path, self.model, self.optimizer,self.scheduler,self.device)
+        self.global_step = checkpoint["global_step"]
+        self.micro_step = checkpoint["micro_step"]
+
+        self.optimizer.zero_grad(set_to_none=True)
+
+        return checkpoint

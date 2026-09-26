@@ -97,9 +97,9 @@ def test_checkpoint_contains_required_fields(tmp_path):
     )
 
     expected_keys = {
-        "model_state",
-        "optimizer_state",
-        "scheduler_state",
+        "model_state_dict",
+        "optimizer_state_dict",
+        "scheduler_state_dict",
         "global_step",
         "micro_step",
         "model_config",
@@ -177,7 +177,7 @@ def test_checkpoint_preserves_model_weights(tmp_path):
         map_location="cpu",
     )
 
-    saved_state = checkpoint["model_state"]
+    saved_state = checkpoint["model_state_dict"]
 
     for key in original_state:
         assert torch.equal(
