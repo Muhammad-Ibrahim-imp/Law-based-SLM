@@ -12,7 +12,7 @@ from data.dedup import hash_text
 def prepare_data(
     subset: str = "atticus_contracts",
     max_documents: int = 200,
-    # documents will be divided into chunks of text (shards) for easier processing
+    # documents will be grouped into chunks of text (shards) for easier processing
     docs_per_shard: int = 50,
     output_dir: str = "data/processed",
     min_chars: int = 200,
@@ -70,7 +70,7 @@ def prepare_data(
         current_shard.append(cleaned)
         total_kept += 1
 
-        if len(current_shard) >= docs_per_shard:    # if the current shard has reached the specified number of documents, write it to a file and reset for the next shard
+        if len(current_shard) >= docs_per_shard:    # if the current shard has reached the specified number of documents, save it to a file and reset for the next shard
             path = write_shard(current_shard, shard_index)
             shard_paths.append(path)
             print(f"Wrote {path} ({len(current_shard)} documents)")
