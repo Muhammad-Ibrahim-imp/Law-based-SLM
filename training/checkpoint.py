@@ -28,9 +28,9 @@ def save_checkpoint(
     path.parent.mkdir(parents=True, exist_ok=True)
 
     checkpoint = {
-        "model_state": model.state_dict(),
-        "optimizer_state": optimizer.state_dict(),
-        "scheduler_state": scheduler.state_dict(),
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "scheduler_state_dict": scheduler.state_dict(),
         "global_step": global_step,
         "micro_step": micro_step,
         "model_config": _to_dict_(model_config),
@@ -39,3 +39,29 @@ def save_checkpoint(
     }
 
     torch.save(checkpoint, path)
+
+def load_checkpoint(path, model, optimizer, scheduler, device):
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Checkpoint {path} does not exist")
+    checkpoint = torch.load(path, map_location=device)
+
+    required_keys = {"model_state_dict",
+                     "optimizer_state_dict",
+                     "scheduler_state_dict",
+                     "global_step",
+                     "micro_step",
+                     "model_config",
+                     "training_config",
+                     "metadata"}
+
+    missing_keys = required_keys - checkpoint.keys()
+
+    if missing_keys:
+        raise ValueError(f"Invalid checkpoint. Missing keys in checkpoint: {missing_keys}")
+
+    model.load_state_dict(checkpoint["model_state_dict"])
+    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+
+    return checkpoint
