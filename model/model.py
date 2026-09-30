@@ -25,7 +25,7 @@ class DecoderLM(nn.Module):
     def forward(self, input_ids: torch.Tensor, position_offset: int = 0) -> torch.Tensor:
         x = self.embedding(input_ids)
         for layer in self.layers:
-            x = x + layer(x, position_offset = position_offset)
+            x = layer(x, position_offset = position_offset)
         x = self.finalnorm(x)
         logits = self.lm_head(x)
         return logits
