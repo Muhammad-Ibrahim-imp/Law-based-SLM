@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.attention import bias
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from model.config import ModelConfig
 from model.rope import RoPE
@@ -44,11 +44,20 @@ class GQAttention(nn.Module):
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
 
-        if self.kv_repeats>1:
-            k = k.repeat_interleave(self.kv_repeats, dim=1)
-            v = v.repeat_interleave(self.kv_repeats, dim=1)
-
-        output = F.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p= 0, is_causal=True)
+        sdpa_args = {
+            "attn_mask": None,
+            "dropout_p": 0.0,
+            "is_causal": True,
+            "enable_gqa": True,
+        }
+        if x.is_cuda:
+            # Force PyTorch's FlashAttention-2-compatible fused SDPA backend.
+            # Failing loudly here prevents accidental benchmark comparisons
+            # against the slower memory-hungry math implementation.
+            with sdpa_kernel(backends=[SDPBackend.FLASH_ATTENTION]):
+                output = F.scaled_dot_product_attention(q, k, v, **sdpa_args)
+        else:
+            output = F.scaled_dot_product_attention(q, k, v, **sdpa_args)
 
         output = output.transpose(1, 2)
         output = output.contiguous().view(B, T, self.n_heads * self.head_dim)
