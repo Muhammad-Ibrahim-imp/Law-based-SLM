@@ -5,7 +5,7 @@ def create_dataloader(dataset,
                batch_size,
                shuffle=True,  # Randomizes sample order each epoch to prevent memorization
                num_workers=0,  # Number of CPU subprocesses for parallel data loading
-               pin_memory=False,  # Speeds up CPU-to-GPU data transfers via pinned RAM
+               pin_memory=True,  # Speeds up CPU-to-GPU data transfers via pinned RAM
                drop_last=True,  # Drops the incomplete final batch to keep batch size uniform
                ):
 
