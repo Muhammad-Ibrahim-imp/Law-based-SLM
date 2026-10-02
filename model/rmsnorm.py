@@ -7,7 +7,7 @@ class RMSNorm(nn.Module):
     def __init__(self, config : ModelConfig):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(config.d_model))
-        self.epsilon  = config.RMS_eps
+        self.epsilon = config.rms_eps
     def forward(self, x : torch.Tensor) -> torch.Tensor:
         input_dtype = x.dtype
         x = x.float()

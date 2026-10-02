@@ -3,7 +3,7 @@ from dataclasses import dataclass, asdict
 @dataclass(frozen=True)
 class ModelConfig:
     # Tokenizer
-    vocab_size: int = 32000
+    vocab_size: int = 49_152
     max_seq_len: int = 8192
 
     pad_id: int = 0
@@ -11,17 +11,17 @@ class ModelConfig:
     eos_id: int = 2
 
     # Transformer
-    d_model: int = 1280
+    d_model: int = 768
     n_layers: int = 24
-    n_heads: int = 20
-    n_kv_heads: int = 5
+    n_heads: int = 12
+    n_kv_heads: int = 4
 
     # Feed Forward
-    d_ff: int = 3840
+    d_ff: int = 2_240
 
     # Normalization/ Positional encoding
-    RMS_eps: float = 1e-5
-    RoPE_theta: int = 500000
+    rms_eps: float = 1e-5
+    rope_theta: float = 500_000.0
 
     # Architecture
     bias: bool = False
@@ -60,6 +60,14 @@ class ModelConfig:
         if self.d_ff <= 0:
             raise ValueError("d_ff must be positive")
 
+        if self.max_seq_len > 8192:
+            raise ValueError("max_seq_len cannot exceed 8192")
+        if self.bias:
+            raise ValueError("this architecture does not use linear biases")
+        if self.dropout != 0.0:
+            raise ValueError("this architecture requires dropout=0.0")
+        if not self.tie_embeddings:
+            raise ValueError("this architecture requires tied embeddings")
 
     @property
     def head_dim(self) -> int:
@@ -74,8 +82,3 @@ class ModelConfig:
 
     def to_dict(self) -> dict:
         return asdict(self)
-
-cfg = ModelConfig()
-print(cfg.head_dim)
-print(cfg.kv_dim)
-print(cfg.n_rep)

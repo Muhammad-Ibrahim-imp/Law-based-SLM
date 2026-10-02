@@ -7,8 +7,8 @@ def initialize_model(
     model: nn.Module, config: ModelConfig
 ) -> None:
 
-    std = 0.2
-    scaled_std = std/math.sqrt(2*config.n_layers)
+    std = 0.02
+    scaled_std = std / math.sqrt(2 * config.n_layers)
 
     for module in model.modules():
         if isinstance(module, nn.Embedding):

@@ -10,23 +10,30 @@ from model.initialization import initialize_model
 class DecoderLM(nn.Module):
     def __init__(self, config: ModelConfig):
         super().__init__()
+        self.config = config
         self.embedding = TokenEmbedding(config)
-        self.finalnorm = RMSNorm(config)
         self.layers = nn.ModuleList(
-            TransformerBlock(config) for _ in range(config.n_layers)
+            [TransformerBlock(config) for _ in range(config.n_layers)]
         )
-        if config.tie_embeddings:
-            self.lm_head = LanguageModelHead(self.embedding.embedding)
-        else:
-            self.lm_head = nn.Linear(
-                    config.d_model, config.vocab_size, bias = config.bias
-                )
-        initialize_model(self,config)
-    def forward(self, input_ids: torch.Tensor, position_offset: int = 0) -> torch.Tensor:
+        self.final_norm = RMSNorm(config)
+        self.lm_head = LanguageModelHead(self.embedding.embedding)
+
+        initialize_model(self, config)
+
+    def forward(
+        self, input_ids: torch.Tensor, position_offset: int = 0
+    ) -> torch.Tensor:
+        if input_ids.ndim != 2:
+            raise ValueError("input_ids must have shape [batch, sequence]")
+        if position_offset + input_ids.shape[1] > self.config.max_seq_len:
+            raise ValueError("input sequence exceeds max_seq_len")
+
         x = self.embedding(input_ids)
         for layer in self.layers:
-            x = layer(x, position_offset = position_offset)
-        x = self.finalnorm(x)
-        logits = self.lm_head(x)
-        return logits
+            x = layer(x, position_offset=position_offset)
+        return self.lm_head(self.final_norm(x))
+
+    @property
+    def parameter_count(self) -> int:
+        return sum(parameter.numel() for parameter in self.parameters())
 
