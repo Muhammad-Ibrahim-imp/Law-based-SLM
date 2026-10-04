@@ -22,7 +22,8 @@ def save_checkpoint(
         micro_step,
         model_config,
         training_config,
-        metadata = None
+        metadata = None,
+        runtime_state = None,
 ):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -35,7 +36,8 @@ def save_checkpoint(
         "micro_step": micro_step,
         "model_config": _to_dict_(model_config),
         "training_config": _to_dict_(training_config),
-        "metadata": metadata or {}
+        "metadata": metadata or {},
+        "runtime_state": runtime_state or {},
     }
 
     torch.save(checkpoint, path)
@@ -44,7 +46,10 @@ def load_checkpoint(path, model, optimizer, scheduler, device):
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Checkpoint {path} does not exist")
-    checkpoint = torch.load(path, map_location=device)
+    # Checkpoints are created by this project and include RNG/sampler state,
+    # not only tensor weights, so the restricted weights-only loader cannot
+    # reconstruct them.
+    checkpoint = torch.load(path, map_location=device, weights_only=False)
 
     required_keys = {"model_state_dict",
                      "optimizer_state_dict",

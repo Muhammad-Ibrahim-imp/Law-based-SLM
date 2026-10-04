@@ -27,7 +27,11 @@ class Trainer:
         self.micro_step = 0
         self.global_step = 0
         self.optimizer.zero_grad(set_to_none=True)
-    def train_step(self,batch):
+    def train_step(self, batch, labels=None):
+        # Keep compatibility with the older train_step(input_ids, labels)
+        # tests while the shared pipeline uses the documented batch mapping.
+        if labels is not None:
+            batch = {"input_ids": batch, "labels": labels}
         validate_batch(batch)
         self.model.train()
 
@@ -72,11 +76,18 @@ class Trainer:
             "micro_step": self.micro_step,
         }
 
-    def save_checkpoint(self, path, model_config, training_config, metadata = None):
+    def save_checkpoint(
+        self,
+        path,
+        model_config,
+        training_config,
+        metadata=None,
+        runtime_state=None,
+    ):
         save_training_checkpoint(path, self.model, self.optimizer,
                                  self.scheduler, self.global_step,
                                  self.micro_step, model_config,
-                                 training_config, metadata)
+                                 training_config, metadata, runtime_state)
     def load_checkpoint(self, path):
         checkpoint = load_training_checkpoint(path, self.model, self.optimizer,self.scheduler,self.device)
         self.global_step = checkpoint["global_step"]
