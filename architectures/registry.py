@@ -11,6 +11,14 @@ def build_model(name: str, config=None):
     if not isinstance(name, str):
         raise TypeError("architecture name must be a string")
     key = name.strip().lower()
+    if key == "custom":
+        raise NotImplementedError(
+            "Architecture 'custom' is only a placeholder. "
+            "Implement DecoderLM in architectures/custom.py: "
+            "constructor(config), forward(input_ids, position_offset=0) -> "
+            "logits [batch, sequence, vocab], and parameter_count. "
+            "build_model('custom') will fail until that exists."
+        )
     if key == "lfm25":
         from architectures.lfm25 import DecoderLM, LFM25Config
 
@@ -38,5 +46,5 @@ def build_model(name: str, config=None):
 
 
 def implemented_names() -> tuple[str, ...]:
-    """Names that build_model can construct. `custom` is excluded."""
+    """Names that construct a real decoder. `custom` is recognized but not ready."""
     return ("lfm25", "qwen3", "gemma3")
