@@ -18,6 +18,13 @@ def build_model(name: str, config=None):
         if not isinstance(cfg, LFM25Config):
             raise TypeError("lfm25 requires an LFM25Config")
         return DecoderLM(cfg)
+    if key == "qwen3":
+        from architectures.qwen3 import DecoderLM, Qwen3Config
+
+        cfg = Qwen3Config() if config is None else config
+        if not isinstance(cfg, Qwen3Config):
+            raise TypeError("qwen3 requires a Qwen3Config")
+        return DecoderLM(cfg)
     raise ValueError(
         f"Unknown architecture {name!r}. Choose one of: {', '.join(implemented_names())}."
     )
@@ -25,4 +32,4 @@ def build_model(name: str, config=None):
 
 def implemented_names() -> tuple[str, ...]:
     """Names that build_model can construct. `custom` is excluded."""
-    return ("lfm25",)
+    return ("lfm25", "qwen3")
