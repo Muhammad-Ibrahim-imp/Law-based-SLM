@@ -65,7 +65,7 @@ The project consists of two specialized legal SLMs:
 | Objective | Next-token prediction |
 | Orchestration | JEV |
 | GPU provider | Modal Labs |
-| Final GPU | To be determined experimentally |
+| Final GPU | NVIDIA H200 SXM |
 
 The final architecture will **not be assumed in advance**. It will be selected after systematic architecture experiments.
 
@@ -266,12 +266,29 @@ Training will be performed using **Modal Labs**.
 
 Candidate GPUs include:
 
+- NVIDIA B300
+- NVIDIA B200
 - NVIDIA H100
 - NVIDIA H200
 - NVIDIA A100
 - NVIDIA RTX PRO 6000
 
-The final GPU will be selected after benchmarking the actual workload.
+The benchmarked training configuration selected for pre-training is:
+
+| Setting | Value |
+|---|---:|
+| GPU | NVIDIA H200 SXM |
+| Sequence length | 2,048 tokens |
+| Micro-batch size | 32 sequences |
+| Gradient accumulation | 8 micro-steps |
+| Global batch size | 524,288 tokens |
+| Precision | BF16 |
+
+The global batch is calculated as:
+
+```text
+2,048 tokens × 32 sequences × 8 accumulation steps = 524,288 tokens
+```
 
 GPU experiments will consider:
 
