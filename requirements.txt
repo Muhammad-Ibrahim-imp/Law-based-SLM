@@ -4,5 +4,5 @@ numpy
 transformers
 datasets
 huggingface_hub
-numpy
 tqdm
+modal==1.6.0
