@@ -65,7 +65,11 @@ The project consists of two specialized legal SLMs:
 | Objective | Next-token prediction |
 | Orchestration | JEV |
 | GPU provider | Modal Labs |
-| Final GPU | To be determined experimentally |
+| Selected GPU | NVIDIA H200 |
+| Training sequence length | 2,048 tokens |
+| Micro-batch size | 32 sequences |
+| Gradient accumulation | 8 micro-steps |
+| Global batch size | 524,288 tokens |
 
 The final architecture will **not be assumed in advance**. It will be selected after systematic architecture experiments.
 
@@ -271,7 +275,29 @@ Candidate GPUs include:
 - NVIDIA A100
 - NVIDIA RTX PRO 6000
 
-The final GPU will be selected after benchmarking the actual workload.
+Based on the completed workload benchmarks, the current training GPU is
+**NVIDIA H200**.
+
+### Selected Training Configuration
+
+| Setting | Value |
+|---|---:|
+| Sequence length | 2,048 tokens |
+| Micro-batch size | 32 sequences |
+| Tokens per micro-step | 65,536 |
+| Gradient accumulation steps | 8 |
+| Global batch size | 524,288 tokens |
+
+The global batch is calculated as:
+
+```text
+2,048 tokens × 32 sequences × 8 accumulation steps
+= 524,288 tokens per optimizer step
+```
+
+This configuration was selected for its measured throughput, cost efficiency,
+memory headroom, and mature software support. Longer-context training can be
+introduced later as a separate curriculum phase.
 
 GPU experiments will consider:
 
