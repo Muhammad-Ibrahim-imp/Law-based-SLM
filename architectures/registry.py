@@ -25,6 +25,13 @@ def build_model(name: str, config=None):
         if not isinstance(cfg, Qwen3Config):
             raise TypeError("qwen3 requires a Qwen3Config")
         return DecoderLM(cfg)
+    if key == "gemma3":
+        from architectures.gemma3 import DecoderLM, Gemma3Config
+
+        cfg = Gemma3Config() if config is None else config
+        if not isinstance(cfg, Gemma3Config):
+            raise TypeError("gemma3 requires a Gemma3Config")
+        return DecoderLM(cfg)
     raise ValueError(
         f"Unknown architecture {name!r}. Choose one of: {', '.join(implemented_names())}."
     )
@@ -32,4 +39,4 @@ def build_model(name: str, config=None):
 
 def implemented_names() -> tuple[str, ...]:
     """Names that build_model can construct. `custom` is excluded."""
-    return ("lfm25", "qwen3")
+    return ("lfm25", "qwen3", "gemma3")
