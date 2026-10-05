@@ -205,9 +205,11 @@ def run_training(
             train_sampler.load_state_dict(runtime["sampler"])
             random.setstate(runtime["python_rng"])
             np.random.set_state(runtime["numpy_rng"])
-            torch.set_rng_state(runtime["torch_rng"])
+            torch.set_rng_state(runtime["torch_rng"].cpu())
             if device.type == "cuda" and runtime.get("cuda_rng") is not None:
-                torch.cuda.set_rng_state_all(runtime["cuda_rng"])
+                torch.cuda.set_rng_state_all(
+                    [state.cpu() for state in runtime["cuda_rng"]]
+                )
             prior_train_seconds = float(runtime.get("train_seconds", 0.0))
 
     if device.type == "cuda":
