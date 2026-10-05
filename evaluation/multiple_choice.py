@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
-from datasets import load_dataset
+from datasets import DownloadManager, load_dataset
 
 
 BENCHMARKS = {
@@ -19,6 +20,22 @@ BENCHMARKS = {
 def load_benchmark(name: str):
     if name not in BENCHMARKS:
         raise ValueError(f"unknown benchmark {name!r}")
+    if name == "piqa":
+        extracted = DownloadManager().download_and_extract(
+            "https://storage.googleapis.com/ai2-mosaic/public/"
+            "physicaliqa/physicaliqa-train-dev.zip"
+        )
+        data_dir = Path(extracted) / "physicaliqa-train-dev"
+        data_path = data_dir / "dev.jsonl"
+        label_path = data_dir / "dev-labels.lst"
+        rows = load_dataset("json", data_files=str(data_path), split="train")
+        labels = [
+            int(value)
+            for value in Path(label_path).read_text(encoding="utf-8").splitlines()
+        ]
+        if len(rows) != len(labels):
+            raise RuntimeError("PIQA validation examples and labels do not match")
+        return rows.add_column("label", labels)
     dataset_name, subset, split = BENCHMARKS[name]
     return load_dataset(dataset_name, subset, split=split)
 

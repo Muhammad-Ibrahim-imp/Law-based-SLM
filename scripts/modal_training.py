@@ -127,8 +127,16 @@ def run_config(
             }
         model.load_state_dict(state)
         tokenizer = load_smollm2_tokenizer()
-        result = []
+        result_path = Path(OUTPUT_ROOT, config.name, "benchmarks.json")
+        result = (
+            json.loads(result_path.read_text(encoding="utf-8"))
+            if result_path.exists()
+            else []
+        )
+        completed = {row["benchmark"] for row in result}
         for benchmark_name in ("hellaswag", "arc_easy", "piqa"):
+            if benchmark_name in completed:
+                continue
             started = time.perf_counter()
             metrics = evaluate_multiple_choice(
                 model,
@@ -139,11 +147,11 @@ def run_config(
             )
             metrics["elapsed_seconds"] = time.perf_counter() - started
             result.append(metrics)
-        Path(OUTPUT_ROOT, config.name, "benchmarks.json").write_text(
-            json.dumps(result, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        run_volume.commit()
+            result_path.write_text(
+                json.dumps(result, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            run_volume.commit()
     else:
         raise ValueError("mode must be 'smoke', 'profile', 'train', or 'evaluate'")
     return result
