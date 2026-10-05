@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import random
 import time
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 
@@ -131,6 +132,7 @@ def run_training(
     device: torch.device,
     resume: bool = True,
     compile_model: bool = False,
+    checkpoint_callback: Callable[[], None] | None = None,
 ) -> dict[str, object]:
     seed_everything(config.seed)
     output_dir = Path(output_root) / config.name
@@ -237,6 +239,8 @@ def run_training(
             metadata={"experiment": config.name},
             runtime_state=runtime_state,
         )
+        if checkpoint_callback is not None:
+            checkpoint_callback()
 
     def validate() -> dict[str, float | int]:
         metrics = evaluate_validation(

@@ -101,6 +101,7 @@ def run_config(
             device,
             resume=True,
             compile_model=compile_model,
+            checkpoint_callback=run_volume.commit,
         )
         run_volume.commit()
     elif mode == "evaluate":
