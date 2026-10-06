@@ -27,7 +27,12 @@ python -m scripts.prepare_general_data --target-tokens 5_000_000_000 --dataset-r
 
 import argparse
 
-from data.general_prep import build_shards, push_to_hub, validate_shards
+from data.general_prep import (
+    build_shards,
+    build_train_validation_shards,
+    push_to_hub,
+    validate_shards,
+)
 
 TRAINING_CONFIG = {
     "gpu": "H200",
@@ -52,6 +57,9 @@ def parse_args():
     p.add_argument("--sequence-length", type=int, default=2048,
                     help="Training-side sequence length, recorded in the "
                          "manifest for the downstream dataloader.")
+    p.add_argument("--validation-ratio", type=float, default=0.005,
+                    help="Deterministic document-level validation fraction. "
+                         "Set to 0 to produce the legacy general-only split.")
     p.add_argument("--dataset-root", type=str, default="./dataset",
                     help="Shared dataset root. Shards go to "
                          "<dataset-root>/general/, manifest.json lives at "
@@ -69,18 +77,32 @@ def parse_args():
 def main():
     args = parse_args()
 
-    build_shards(
-        target_tokens=args.target_tokens,
-        dataset_root=args.dataset_root,
-        category="general",
-        shard_tokens=args.shard_tokens,
-        fineweb_ratio=args.fineweb_ratio,
-        sequence_length=args.sequence_length,
-        training_config=TRAINING_CONFIG,
-    )
+    if args.validation_ratio:
+        build_train_validation_shards(
+            target_tokens=args.target_tokens,
+            dataset_root=args.dataset_root,
+            validation_ratio=args.validation_ratio,
+            shard_tokens=args.shard_tokens,
+            fineweb_ratio=args.fineweb_ratio,
+            sequence_length=args.sequence_length,
+            training_config=TRAINING_CONFIG,
+        )
+        categories = ("general_train", "general_validation")
+    else:
+        build_shards(
+            target_tokens=args.target_tokens,
+            dataset_root=args.dataset_root,
+            category="general",
+            shard_tokens=args.shard_tokens,
+            fineweb_ratio=args.fineweb_ratio,
+            sequence_length=args.sequence_length,
+            training_config=TRAINING_CONFIG,
+        )
+        categories = ("general",)
 
     if not args.skip_validate:
-        validate_shards(args.dataset_root, category="general")
+        for category in categories:
+            validate_shards(args.dataset_root, category=category)
 
     if args.push_repo:
         push_to_hub(args.dataset_root, args.push_repo, private=args.private)

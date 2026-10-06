@@ -7,8 +7,12 @@ venv/
 checkpoints/
 data/raw/
 data/processed/
+dataset/
 benchmarks/results/
+results/
+logs/
 
+*.bin
 *.pt
 *.pth
 *.ckpt

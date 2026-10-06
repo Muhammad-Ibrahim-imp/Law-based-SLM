@@ -249,6 +249,122 @@ def build_shards(
     return category_entry
 
 
+def build_train_validation_shards(
+    target_tokens: int,
+    dataset_root: str,
+    validation_ratio: float = 0.005,
+    shard_tokens: int = 268_435_456,
+    fineweb_ratio: float = 0.8,
+    sequence_length: int = 2048,
+    training_config: dict | None = None,
+    eos_between_docs: bool = True,
+    split_seed: int = 42,
+):
+    """Build deterministic, document-disjoint train and validation shards."""
+    if not 0.0 < validation_ratio < 1.0:
+        raise ValueError("validation_ratio must be between 0 and 1")
+
+    train_target = round(target_tokens * (1.0 - validation_ratio))
+    targets = {
+        "general_train": train_target,
+        "general_validation": target_tokens - train_target,
+    }
+    tokenizer = load_smollm2_tokenizer()
+    eos_id = tokenizer.eos_token_id
+    streams = get_source_streams()
+    text_iter = mixed_text_iterator(streams, fineweb_ratio, seed=split_seed)
+    buffers = {category: [] for category in targets}
+    totals = {category: 0 for category in targets}
+    shard_indices = {category: 0 for category in targets}
+    entries = {}
+
+    for category, split_target in targets.items():
+        os.makedirs(os.path.join(dataset_root, category), exist_ok=True)
+        entries[category] = {
+            "source": "SmolLM-Corpus (fineweb-edu-dedup + cosmopedia-v2)",
+            "split": "validation" if category.endswith("validation") else "train",
+            "document_split": {
+                "method": "sha256(seed + source + text)",
+                "seed": split_seed,
+                "validation_ratio": validation_ratio,
+            },
+            "fineweb_ratio": fineweb_ratio,
+            "sequence_length": sequence_length,
+            "training_config": training_config or {},
+            "eos_boundary_handling": (
+                "eos_token_id appended after every source document before "
+                "concatenation; train and validation documents are disjoint"
+            ),
+            "shard_tokens_target": shard_tokens,
+            "target_tokens": split_target,
+            "shards": [],
+            "per_source_doc_counts": {
+                "fineweb-edu-dedup": 0,
+                "cosmopedia-v2": 0,
+            },
+            "total_tokens_written": 0,
+            "total_docs_written": 0,
+            "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+
+    def write_shard(category: str, token_ids: list[int]) -> None:
+        arr = np.array(token_ids, dtype=np.uint16)
+        shard_name = f"shard_{shard_indices[category]:05d}.bin"
+        arr.tofile(os.path.join(dataset_root, category, shard_name))
+        entries[category]["shards"].append({
+            "file": shard_name,
+            "tokens": int(arr.size),
+            "checksum_sha256": _shard_checksum(arr),
+        })
+        shard_indices[category] += 1
+
+    threshold = int(validation_ratio * (1 << 64))
+    while any(totals[name] < target for name, target in targets.items()):
+        try:
+            text, source = next(text_iter)
+        except StopIteration as error:
+            raise RuntimeError("source streams ended before both split targets") from error
+        digest = hashlib.sha256(
+            f"{split_seed}\0{source}\0{text}".encode("utf-8")
+        ).digest()
+        category = (
+            "general_validation"
+            if int.from_bytes(digest[:8], "big") < threshold
+            else "general_train"
+        )
+        if totals[category] >= targets[category]:
+            continue
+
+        ids = tokenizer.encode(text)
+        if eos_between_docs and eos_id is not None:
+            ids.append(eos_id)
+        buffers[category].extend(ids)
+        totals[category] += len(ids)
+        entries[category]["per_source_doc_counts"][source] += 1
+        entries[category]["total_docs_written"] += 1
+
+        while len(buffers[category]) >= shard_tokens:
+            write_shard(category, buffers[category][:shard_tokens])
+            buffers[category] = buffers[category][shard_tokens:]
+
+    finished_at = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+    for category in targets:
+        if buffers[category]:
+            write_shard(category, buffers[category])
+        entries[category]["total_tokens_written"] = totals[category]
+        entries[category]["finished_at"] = finished_at
+
+    manifest = _load_or_init_manifest(dataset_root)
+    manifest["categories"].update(entries)
+    _save_manifest(dataset_root, manifest)
+    for category, entry in entries.items():
+        print(
+            f"Done. {entry['total_tokens_written']:,} tokens across "
+            f"{len(entry['shards'])} shard(s) -> "
+            f"{os.path.join(dataset_root, category)}"
+        )
+    return entries
+
 
 # Validation -- read shards back and confirm integrity before calling the
 # dataset "ready for pretraining"
