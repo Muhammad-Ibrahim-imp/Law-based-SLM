@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import time
 from pathlib import Path
 
 import modal
@@ -163,6 +165,22 @@ def config_names(size: str) -> list[str]:
     return [path.stem for path in discover_configs(size, None)]
 
 
+@app.function(
+    gpu="H200",
+    timeout=FUNCTION_TIMEOUT_SECONDS,
+    cpu=8,
+    memory=32_768,
+    volumes={"/vol/data": data_volume, "/vol/runs": run_volume},
+)
+def run_sequence(
+    names: list[str],
+    mode: str,
+    compile_model: bool = False,
+) -> list[dict[str, object] | list[dict[str, object]]]:
+    """Train or evaluate several configs inside one container."""
+    return [run_config.local(config_name, mode, compile_model) for config_name in names]
+
+
 @app.local_entrypoint()
 def main(
     mode: str,
@@ -178,7 +196,22 @@ def main(
         raise ValueError(
             "--mode must be prepare-data, smoke, profile, train, or evaluate"
         )
-    names = [name] if name else config_names(size)
+    names = (
+        [item.strip() for item in name.split(",") if item.strip()]
+        if name
+        else config_names(size)
+    )
+    if mode in {"train", "evaluate"}:
+        # Spawn an async call, then hard-exit. A waiting .remote() call is
+        # cancelled when this machine loses DNS, and a normal entrypoint
+        # return sends AppClientDisconnect, which stops the ephemeral app.
+        if len(names) > 1:
+            call = run_sequence.spawn(names, mode, compile_model)
+        else:
+            call = run_config.spawn(names[0], mode, compile_model)
+        print(call.object_id, flush=True)
+        time.sleep(3)
+        os._exit(0)
     results = []
     for config_name in names:
         result = run_config.remote(config_name, mode, compile_model)
