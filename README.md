@@ -65,7 +65,7 @@ The project consists of two specialized legal SLMs:
 | Objective | Next-token prediction |
 | Orchestration | JEV |
 | GPU provider | Modal Labs |
-| Final GPU | To be determined experimentally |
+| Final GPU | NVIDIA H200 SXM |
 
 The final architecture will **not be assumed in advance**. It will be selected after systematic architecture experiments.
 
@@ -166,11 +166,11 @@ Before training the final ~200M-parameter SLMs, approximately four Transformer a
 ### Candidate Architectures
 
 1. **GQA-based Transformer**
-2. **DeepSeek-inspired Transformer**
-3. **Qwen-inspired Transformer**
-4. **LLaMA-inspired Transformer**
+2. **LFM2.5-inspired hybrid**
+3. **Qwen3-inspired Transformer**
+4. **Gemma 3-inspired Transformer**
 
-The implementations will be developed from scratch while taking architectural ideas from the respective model families.
+The implementations are developed from scratch while taking architectural ideas from the respective model families. The 25M, 50M, and 100M comparison is recorded in `reports/architecture_sweep.md`. Gemma 3 had the lowest held-out loss at 100M.
 
 The goal is not to assume that one architecture is automatically better, but to experimentally determine which design is most suitable for this project.
 
@@ -192,9 +192,9 @@ After comparing the architectures, the selected architecture will be scaled to a
 
 ```text
 GQA ─────────────┐
-DeepSeek ────────┤
-Qwen ────────────┼──► 25M / 50M / 100M
-LLaMA ───────────┘
+LFM2.5 ──────────┤
+Qwen3 ───────────┼──► 25M / 50M / 100M
+Gemma 3 ─────────┘
                        │
                        ▼
                 Compare Results
@@ -266,12 +266,29 @@ Training will be performed using **Modal Labs**.
 
 Candidate GPUs include:
 
+- NVIDIA B300
+- NVIDIA B200
 - NVIDIA H100
 - NVIDIA H200
 - NVIDIA A100
 - NVIDIA RTX PRO 6000
 
-The final GPU will be selected after benchmarking the actual workload.
+The benchmarked training configuration selected for pre-training is:
+
+| Setting | Value |
+|---|---:|
+| GPU | NVIDIA H200 SXM |
+| Sequence length | 2,048 tokens |
+| Micro-batch size | 32 sequences |
+| Gradient accumulation | 8 micro-steps |
+| Global batch size | 524,288 tokens |
+| Precision | BF16 |
+
+The global batch is calculated as:
+
+```text
+2,048 tokens × 32 sequences × 8 accumulation steps = 524,288 tokens
+```
 
 GPU experiments will consider:
 
@@ -876,12 +893,12 @@ The project will proceed approximately as follows:
 8. Test batch sizes, sequence lengths, memory usage, and throughput.
 9. Validate checkpointing and recovery.
 10. Validate generation and KV-cache functionality.
-11. Implement the DeepSeek-inspired architecture.
-12. Implement the Qwen-inspired architecture.
-13. Implement the LLaMA-inspired architecture.
+11. Implement the LFM2.5-inspired architecture.
+12. Implement the Qwen3-inspired architecture.
+13. Implement the Gemma 3-inspired architecture.
 14. Test architecture variants at approximately 25M, 50M, and 100M parameters.
 15. Compare architecture quality, efficiency, stability, and cost.
-16. Select the architecture based on experimental results.
+16. Select the architecture based on experimental results. Gemma 3 is the current selection on held-out loss. The 200M run has not started.
 17. Scale the selected architecture to approximately 200M parameters.
 18. Train the family-law SLM.
 19. Train the criminal-law SLM.
@@ -895,31 +912,23 @@ The project will proceed approximately as follows:
 
 # 23. Current Status
 
-Current development is focused on:
+The 25M, 50M, and 100M training sweep is complete. Gemma 3 is the selected architecture on held-out validation loss. Details, member ownership, and the measured numbers are in `reports/architecture_sweep.md`.
 
-- GQA architecture implementation
-- Model component testing
-- Training infrastructure
-- Trainer testing
-- Configuration experiments
-- GPU benchmarking methodology
+Completed:
+
+- GQA, LFM2.5, Qwen3, and Gemma 3 implementations
+- Deterministic general-corpus split and the 12-run H200 sweep
+- Held-out loss for all 12 runs
+- HellaSwag, ARC-Easy, and PIQA for the 25M and 50M models
 
 Next major stages:
 
 ```text
-Complete GQA
+100M multiple-choice benchmarks
       ↓
-Complete Testing
+Generation loop, then a local chat check
       ↓
-GPU / Training Configuration Experiments
-      ↓
-DeepSeek / Qwen / LLaMA Variants
-      ↓
-25M / 50M / 100M Experiments
-      ↓
-Architecture Comparison
-      ↓
-Select Architecture
+Scale Gemma 3 to ~200M at sequence length 8,192
       ↓
 ~200M Family-Law SLM
 ~200M Criminal-Law SLM
