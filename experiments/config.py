@@ -32,6 +32,7 @@ class ExperimentConfig:
     eval_every_steps: int
     checkpoint_every_steps: int
     validation_batches: int | None
+    copy_mechanism: bool = False
 
     def __post_init__(self) -> None:
         if self.architecture not in {"gqa", "lfm25", "qwen3", "gemma3"}:

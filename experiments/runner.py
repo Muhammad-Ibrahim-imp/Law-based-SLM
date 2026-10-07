@@ -19,6 +19,7 @@ from experiments.config import ExperimentConfig
 from experiments.data import StatefulBatchSampler
 from experiments.models import build_experiment_model
 from training.checkpoint import load_checkpoint
+from training.copy_mechanism import CopyLM
 from training.optimizer import adamw
 from training.scheduler import build_scheduler_cosine
 from training.trainer import Trainer
@@ -44,7 +45,8 @@ def run_smoke_test(
     """Train repeatedly on one deterministic batch and require finite descent."""
     seed_everything(config.seed)
     base_model = build_experiment_model(config).to(device)
-    model = torch.compile(base_model) if compile_model else base_model
+    trainable = CopyLM(base_model).to(device) if config.copy_mechanism else base_model
+    model = torch.compile(trainable) if compile_model else trainable
     optimizer = adamw(
         model,
         learning_rate=config.learning_rate,
@@ -168,9 +170,8 @@ def run_training(
     )
 
     base_model = build_experiment_model(config).to(device)
-    model = base_model
-    if compile_model:
-        model = torch.compile(model)
+    trainable = CopyLM(base_model).to(device) if config.copy_mechanism else base_model
+    model = torch.compile(trainable) if compile_model else trainable
     optimizer = adamw(
         model,
         learning_rate=config.learning_rate,
@@ -316,6 +317,7 @@ def run_training(
         "architecture": config.architecture,
         "size": config.size,
         "parameter_count": base_model.parameter_count,
+        "copy_mechanism": config.copy_mechanism,
         "target_train_tokens": config.target_train_tokens,
         "actual_train_tokens": tokens_seen,
         "optimizer_steps": trainer.global_step,

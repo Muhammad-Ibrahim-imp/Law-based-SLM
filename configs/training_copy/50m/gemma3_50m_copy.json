@@ -1,0 +1,31 @@
+{
+  "name": "gemma3_50m_copy",
+  "architecture": "gemma3",
+  "size": "50m",
+  "expected_parameters": 50406544,
+  "copy_mechanism": true,
+  "model": {
+    "d_model": 400,
+    "n_layers": 12,
+    "n_heads": 4,
+    "n_kv_heads": 1,
+    "head_dim": 256,
+    "d_ff": 1280
+  },
+  "seed": 42,
+  "target_train_tokens": 500000000,
+  "sequence_length": 2048,
+  "micro_batch_size": 32,
+  "gradient_accumulation_steps": 8,
+  "learning_rate": 0.00045,
+  "betas": [0.9, 0.95],
+  "eps": 1e-8,
+  "weight_decay": 0.1,
+  "warmup_ratio": 0.02,
+  "min_lr_ratio": 0.1,
+  "max_grad_norm": 1.0,
+  "log_every_steps": 10,
+  "eval_every_steps": 100,
+  "checkpoint_every_steps": 100,
+  "validation_batches": null
+}

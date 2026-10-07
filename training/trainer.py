@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+from training.copy_mechanism import is_copy_model
 from training.loss import causal_language_model_loss
 from training.gradient import clip_gradients
 from training.checkpoint import (save_checkpoint as save_training_checkpoint,
@@ -40,8 +41,11 @@ class Trainer:
 
         with torch.autocast(device_type=self.device.type,
                         dtype=torch.bfloat16):
-            logits = self.model(inputs)
-            loss = causal_language_model_loss(logits,labels)
+            if is_copy_model(self.model):
+                loss = self.model(inputs, labels=labels)
+            else:
+                logits = self.model(inputs)
+                loss = causal_language_model_loss(logits,labels)
 
         logging_loss = loss.detach()
         loss = loss / self.gradient_accumulation_steps

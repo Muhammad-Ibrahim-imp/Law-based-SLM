@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REMOTE_ROOT = "/root/project"
 DATA_ROOT = "/vol/data/dataset"
 OUTPUT_ROOT = "/vol/runs/training_sweep"
+COPY_OUTPUT_ROOT = "/vol/runs/training_sweep_copy"
 FUNCTION_TIMEOUT_SECONDS = 86_400
 
 image = (
@@ -77,6 +78,8 @@ def run_config(
 
     matches = list(
         Path(REMOTE_ROOT, "configs", "training").glob(f"*/{config_name}.json")
+    ) + list(
+        Path(REMOTE_ROOT, "configs", "training_copy").glob(f"*/{config_name}.json")
     )
     if len(matches) != 1:
         raise ValueError(f"expected one config named {config_name!r}, found {matches}")
@@ -96,16 +99,17 @@ def run_config(
         )
     elif mode == "train":
         data_volume.reload()
+        run_volume.reload()
         result = run_training(
             config,
             DATA_ROOT,
-            OUTPUT_ROOT,
+            COPY_OUTPUT_ROOT if config.copy_mechanism else OUTPUT_ROOT,
             device,
             resume=True,
             compile_model=compile_model,
-            checkpoint_callback=run_volume.commit,
+            checkpoint_callback=commit_run_volume,
         )
-        run_volume.commit()
+        commit_run_volume()
     elif mode == "evaluate":
         from evaluation.multiple_choice import (
             evaluate_multiple_choice,
@@ -116,7 +120,8 @@ def run_config(
         import time
 
         run_volume.reload()
-        checkpoint_path = Path(OUTPUT_ROOT, config.name, "checkpoint.pt")
+        output_root = COPY_OUTPUT_ROOT if config.copy_mechanism else OUTPUT_ROOT
+        checkpoint_path = Path(output_root, config.name, "checkpoint.pt")
         checkpoint = torch.load(
             checkpoint_path, map_location=device, weights_only=False
         )
@@ -129,7 +134,7 @@ def run_config(
             }
         model.load_state_dict(state)
         tokenizer = load_smollm2_tokenizer()
-        result_path = Path(OUTPUT_ROOT, config.name, "benchmarks.json")
+        result_path = Path(output_root, config.name, "benchmarks.json")
         result = (
             json.loads(result_path.read_text(encoding="utf-8"))
             if result_path.exists()
@@ -157,6 +162,18 @@ def run_config(
     else:
         raise ValueError("mode must be 'smoke', 'profile', 'train', or 'evaluate'")
     return result
+
+
+def commit_run_volume() -> None:
+    """Retry volume commits so four parallel runs can checkpoint together."""
+    for attempt in range(6):
+        try:
+            run_volume.commit()
+            return
+        except Exception:
+            if attempt == 5:
+                raise
+            time.sleep(2 * (attempt + 1))
 
 
 def config_names(size: str) -> list[str]:
@@ -187,6 +204,7 @@ def main(
     size: str = "all",
     name: str = "",
     compile_model: bool = False,
+    parallel: bool = False,
     target_tokens: int = 1_000_000_000,
 ) -> None:
     if mode == "prepare-data":
@@ -205,11 +223,18 @@ def main(
         # Spawn an async call, then hard-exit. A waiting .remote() call is
         # cancelled when this machine loses DNS, and a normal entrypoint
         # return sends AppClientDisconnect, which stops the ephemeral app.
-        if len(names) > 1:
+        if parallel and len(names) > 1:
+            calls = [
+                run_config.spawn(config_name, mode, compile_model)
+                for config_name in names
+            ]
+            print(" ".join(call.object_id for call in calls), flush=True)
+        elif len(names) > 1:
             call = run_sequence.spawn(names, mode, compile_model)
+            print(call.object_id, flush=True)
         else:
             call = run_config.spawn(names[0], mode, compile_model)
-        print(call.object_id, flush=True)
+            print(call.object_id, flush=True)
         time.sleep(3)
         os._exit(0)
     results = []

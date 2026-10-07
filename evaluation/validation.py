@@ -8,6 +8,8 @@ from collections.abc import Iterable
 import torch
 import torch.nn.functional as F
 
+from training.copy_mechanism import is_copy_model
+
 
 @torch.no_grad()
 def evaluate_validation(
@@ -31,12 +33,15 @@ def evaluate_validation(
             dtype=torch.bfloat16,
             enabled=device.type in {"cuda", "cpu"},
         ):
-            logits = model(input_ids)
-            loss_sum = F.cross_entropy(
-                logits.reshape(-1, logits.shape[-1]),
-                labels.reshape(-1),
-                reduction="sum",
-            )
+            if is_copy_model(model):
+                loss_sum = model(input_ids, labels=labels, reduction="sum")
+            else:
+                logits = model(input_ids)
+                loss_sum = F.cross_entropy(
+                    logits.reshape(-1, logits.shape[-1]),
+                    labels.reshape(-1),
+                    reduction="sum",
+                )
         token_count = labels.numel()
         total_loss += float(loss_sum)
         total_tokens += token_count
