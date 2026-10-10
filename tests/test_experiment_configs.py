@@ -10,7 +10,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_all_twelve_configs_build_with_exact_parameter_counts():
-    paths = sorted((ROOT / "configs" / "training").glob("*/*.json"))
+    paths = sorted(
+        path
+        for path in (ROOT / "configs" / "training").glob("*/*.json")
+        if path.parent.name in {"25m", "50m", "100m"}
+    )
     assert len(paths) == 12
     for path in paths:
         config = load_experiment_config(path)
@@ -31,6 +35,8 @@ def test_size_budgets_and_shared_training_policy():
     }
     grouped = {size: [] for size in expected}
     for path in (ROOT / "configs" / "training").glob("*/*.json"):
+        if path.parent.name not in expected:
+            continue
         config = load_experiment_config(path)
         grouped[config.size].append(config)
     for size, configs in grouped.items():
