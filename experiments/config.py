@@ -37,7 +37,7 @@ class ExperimentConfig:
     def __post_init__(self) -> None:
         if self.architecture not in {"gqa", "lfm25", "qwen3", "gemma3"}:
             raise ValueError(f"unsupported architecture: {self.architecture!r}")
-        if self.size not in {"25m", "50m", "100m"}:
+        if self.size not in {"25m", "50m", "100m", "200m"}:
             raise ValueError(f"unsupported size: {self.size!r}")
         positive = {
             "expected_parameters": self.expected_parameters,

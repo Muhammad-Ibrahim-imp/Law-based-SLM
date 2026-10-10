@@ -27,7 +27,21 @@ image = (
         "huggingface_hub",
         "tqdm",
     )
-    .add_local_dir(ROOT, remote_path=REMOTE_ROOT, copy=True)
+    .add_local_dir(
+        ROOT,
+        remote_path=REMOTE_ROOT,
+        copy=True,
+        ignore=[
+            "dataset/**",
+            "results/**",
+            ".git/**",
+            "**/*.pt",
+            "**/*.bin",
+            "**/*.pyc",
+            "**/__pycache__/**",
+            ".pytest_cache/**",
+        ],
+    )
     .env({"PYTHONPATH": REMOTE_ROOT})
 )
 app = modal.App("law-slm-architecture-sweep", image=image)
@@ -39,9 +53,13 @@ run_volume = modal.Volume.from_name("law-slm-training", create_if_missing=True)
     timeout=FUNCTION_TIMEOUT_SECONDS,
     cpu=8,
     memory=32_768,
+    nonpreemptible=True,
     volumes={"/vol/data": data_volume},
 )
-def prepare_data(target_tokens: int = 1_000_000_000) -> None:
+def prepare_data(
+    target_tokens: int = 1_000_000_000,
+    dataset_root: str = DATA_ROOT,
+) -> None:
     subprocess.run(
         [
             "python",
@@ -50,14 +68,21 @@ def prepare_data(target_tokens: int = 1_000_000_000) -> None:
             "--target-tokens",
             str(target_tokens),
             "--dataset-root",
-            DATA_ROOT,
+            dataset_root,
             "--validation-ratio",
             "0.005",
         ],
         cwd=REMOTE_ROOT,
         check=True,
     )
-    data_volume.commit()
+    for attempt in range(6):
+        try:
+            data_volume.commit()
+            return
+        except Exception:
+            if attempt == 5:
+                raise
+            time.sleep(2 * (attempt + 1))
 
 
 @app.function(
@@ -71,6 +96,7 @@ def run_config(
     config_name: str,
     mode: str,
     compile_model: bool = False,
+    dataset_root: str = DATA_ROOT,
 ) -> dict[str, object] | list[dict[str, object]]:
     from experiments.config import load_experiment_config
     from experiments.runner import run_smoke_test, run_training
@@ -102,7 +128,7 @@ def run_config(
         run_volume.reload()
         result = run_training(
             config,
-            DATA_ROOT,
+            dataset_root,
             COPY_OUTPUT_ROOT if config.copy_mechanism else OUTPUT_ROOT,
             device,
             resume=True,
@@ -193,9 +219,13 @@ def run_sequence(
     names: list[str],
     mode: str,
     compile_model: bool = False,
+    dataset_root: str = DATA_ROOT,
 ) -> list[dict[str, object] | list[dict[str, object]]]:
     """Train or evaluate several configs inside one container."""
-    return [run_config.local(config_name, mode, compile_model) for config_name in names]
+    return [
+        run_config.local(config_name, mode, compile_model, dataset_root)
+        for config_name in names
+    ]
 
 
 @app.local_entrypoint()
@@ -206,10 +236,15 @@ def main(
     compile_model: bool = False,
     parallel: bool = False,
     target_tokens: int = 1_000_000_000,
+    dataset_root: str = DATA_ROOT,
 ) -> None:
     if mode == "prepare-data":
-        prepare_data.remote(target_tokens)
-        return
+        # Same detach pattern as training: a waiting call dies if this
+        # machine loses its connection during the multi-hour build.
+        call = prepare_data.spawn(target_tokens, dataset_root)
+        print(call.object_id, flush=True)
+        time.sleep(3)
+        os._exit(0)
     if mode not in {"smoke", "profile", "train", "evaluate"}:
         raise ValueError(
             "--mode must be prepare-data, smoke, profile, train, or evaluate"
@@ -225,15 +260,15 @@ def main(
         # return sends AppClientDisconnect, which stops the ephemeral app.
         if parallel and len(names) > 1:
             calls = [
-                run_config.spawn(config_name, mode, compile_model)
+                run_config.spawn(config_name, mode, compile_model, dataset_root)
                 for config_name in names
             ]
             print(" ".join(call.object_id for call in calls), flush=True)
         elif len(names) > 1:
-            call = run_sequence.spawn(names, mode, compile_model)
+            call = run_sequence.spawn(names, mode, compile_model, dataset_root)
             print(call.object_id, flush=True)
         else:
-            call = run_config.spawn(names[0], mode, compile_model)
+            call = run_config.spawn(names[0], mode, compile_model, dataset_root)
             print(call.object_id, flush=True)
         time.sleep(3)
         os._exit(0)

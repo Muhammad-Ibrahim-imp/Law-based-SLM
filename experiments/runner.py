@@ -223,6 +223,27 @@ def run_training(
     def write_event(event: dict[str, object]) -> None:
         with log_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(event, allow_nan=False) + "\n")
+        kind = event["event"]
+        step = event.get("optimizer_step")
+        if kind == "checkpoint":
+            print(
+                f"checkpoint {config.name} step {step} "
+                f"tokens {event['tokens_seen']}",
+                flush=True,
+            )
+        elif kind == "train":
+            print(
+                f"train {config.name} step {step} "
+                f"loss {float(event['loss']):.4f} "
+                f"tokens {event['tokens_seen']}",
+                flush=True,
+            )
+        elif kind == "validation":
+            print(
+                f"validation {config.name} step {step} "
+                f"loss {float(event['validation_loss']):.4f}",
+                flush=True,
+            )
 
     def save() -> None:
         runtime_state = {
@@ -241,6 +262,14 @@ def run_training(
             asdict(config),
             metadata={"experiment": config.name},
             runtime_state=runtime_state,
+        )
+        write_event(
+            {
+                "event": "checkpoint",
+                "optimizer_step": trainer.global_step,
+                "tokens_seen": trainer.global_step * config.tokens_per_optimizer_step,
+                "path": str(checkpoint_path),
+            }
         )
         if checkpoint_callback is not None:
             checkpoint_callback()
