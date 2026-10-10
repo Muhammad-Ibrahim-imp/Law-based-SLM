@@ -1,8 +1,8 @@
 # Architecture sweep report
 
-This report covers the fair 12-run comparison of GQA, LFM2.5, Qwen3, and Gemma 3 at 25M, 50M, and 100M parameters. All 12 training runs finished. The 100M multiple-choice benchmarks have not been run.
+This report covers the fair 12-run comparison of GQA, LFM2.5, Qwen3, and Gemma 3 at 25M, 50M, and 100M parameters, and the later 200M general pre-training of Gemma 3 and LFM2.5. All 12 smaller training runs finished. Both 200M general runs finished. The 100M and 200M multiple-choice benchmarks have not been run.
 
-The selection metric agreed for this sweep is held-out validation loss, with perplexity reported from that loss. On that metric, **Gemma 3 is the architecture to scale to the 200M models.**
+The selection metric agreed for this sweep is held-out validation loss, with perplexity reported from that loss. On that metric, **Gemma 3 is the architecture to keep.** It led at 50M, 100M, and 200M.
 
 ## Who did which part
 
@@ -86,7 +86,7 @@ No folder exists for these, and none of them is in the team split.
 | Security and jailbreak resistance | Filters, abuse tests, and defenses against prompts that try to bypass the model's limits |
 | Accounts and distribution | Logins, user data, and shipping an app to users |
 
-Generation, the 200M training run, JEV, legal data, the 100M benchmarks, and SFT are still member work. They are listed under "What is next" and in README section 21. A chat window is not the same thing as Member B's generation code.
+Generation, JEV, legal data, the 100M and 200M benchmarks, and SFT are still member work. They are listed under "What is next" and in README section 21. A chat window is not the same thing as Member B's generation code. The 200M general pre-training of Gemma 3 and LFM2.5 is finished and is recorded below.
 
 ## Result
 
@@ -142,15 +142,15 @@ Accuracy / length-normalized accuracy:
 
 ## Recommendation
 
-Use **Gemma 3** for the 200M family-law and criminal-law models.
+Use **Gemma 3** for the family-law and criminal-law models.
 
-It has the best validation loss at both 50M and 100M, which are the scales closest to the 200M target. The 25M ranking is different: LFM2.5 led there by a wide margin. That lead did not hold after the longer runs.
+It has the best validation loss at 50M, 100M, and 200M. The 200M general run is the closest evidence to the models this project will train next. Gemma 3 finished that run at validation loss 2.9243. LFM2.5 finished at 2.9700. The 25M ranking is different: LFM2.5 led there by a wide margin. That lead did not hold after the longer runs.
 
-LFM2.5 is the alternative if GPU time becomes the binding constraint. At 100M its loss is 3.5837 against Gemma 3's 3.5433, and it trains at 462,148 tokens/sec against 233,161. Qwen3 matches LFM2.5 on loss and is slower. GQA is last on loss at 50M and 100M.
+LFM2.5 is the alternative if GPU time becomes the binding constraint. At 200M its loss is 2.9700 against Gemma 3's 2.9243, and it trains at 225,894 tokens/sec against 87,102. Qwen3 and GQA were not trained at 200M. At 100M, Qwen3 matched LFM2.5 on loss and was slower, and GQA was last.
 
-This choice is not a claim about legal answering quality. The sweep used general web and textbook text, sequence length 2,048, and at most 1B tokens. Legal pre-training, supervised fine-tuning, and JEV have not started.
+This choice is not a claim about legal answering quality. The 200M run used general web and textbook text only. Legal pre-training, supervised fine-tuning, JEV, and the 200M multiple-choice benchmarks have not started.
 
-The later copy-mechanism runs do not change this choice. They are recorded below. Gemma 3 is still the best architecture at 100M with the copy path turned on, but its loss is worse than the same model without the copy path.
+The later copy-mechanism runs do not change this choice. They are recorded below. Gemma 3 is still the best architecture at 100M with the copy path turned on, but its loss is worse than the same model without the copy path. The 200M runs did not use the copy path.
 
 ## Copy mechanism
 
@@ -193,7 +193,65 @@ Configs are in `configs/training_copy/`. Checkpoints are on that account's `law-
 | Qwen3 | 3.5825 | 3.7814 | +0.199 | 43.88 | 331,395 |
 | GQA | 3.6555 | 3.8420 | +0.186 | 46.62 | 347,409 |
 
-At every size, the copy path raised held-out loss. Do not use it for the 200M models unless a later experiment shows a gain on legal text. Gemma 3 remains the architecture to scale. LFM2.5 remains the faster alternative.
+At every size, the copy path raised held-out loss. The 200M runs left it off. Gemma 3 remains the architecture to keep. LFM2.5 remains the faster alternative.
+
+## 200M general pre-training
+
+Both runs are finished. This is the README general-corpus stage: 5.0 billion tokens, of which 99.5% is train and 0.5% is validation. It is not the full 14.4 billion token pre-training plan. The family-law corpus, the criminal-law corpus, and the 0.3 billion token SFT set have not been collected, so those stages have not started. Qwen3 and GQA were not trained at 200M.
+
+The copy path is off. The sequence length is 8,192. The global batch stays 524,288 tokens: sequence 8,192, micro-batch 2, accumulation 32. The peak learning rate is 2e-4 for both models. The rest of the schedule matches the smaller sweep: AdamW, betas (0.9, 0.95), epsilon 1e-8, weight decay 0.1 on parameters with more than one dimension, cosine decay to 10% of the peak, 2% warmup, gradient clip 1.0, seed 42, BF16, and `torch.compile`. One H200 ran each model. The two models were not on one workspace for the whole run, because volumes are not shared across Modal accounts and credits ran out between resumes.
+
+The prepared train split is 4,975,001,703 tokens. The optimizer ran 9,490 steps, which is 4,975,493,120 tokens. The extra tokens are the packed windows needed to finish the last step. Held-out validation at the end is 24,993,792 tokens, 1,526 batches. The first 1,907 steps used the earlier 1 billion token corpus and its smaller validation split of 5,021,696 tokens. From step 2,000 on, validation uses the 5 billion token corpus. A loss change exactly at that switch is a change of validation set, not a training failure.
+
+`train_seconds` is the time stored inside the training loop, including every successful resume. It does not include the hours a job spent stopped while the checkpoint was moved to a new account.
+
+### Final held-out result
+
+| Architecture | Parameters | Validation loss | Perplexity | Tokens/sec | Train seconds | Peak memory |
+|---|---:|---:|---:|---:|---:|---:|
+| Gemma 3 | 200,069,440 | 2.9243 | 18.62 | 87,102 | 57,122.42 | 25,649,924,608 |
+| LFM2.5 | 194,691,072 | 2.9700 | 19.49 | 225,894 | 22,025.76 | 24,017,023,488 |
+
+Gemma 3 is ahead by 0.0457 loss. LFM2.5 is about 2.6 times faster. The final learning rate for both runs is 2e-5, which is the planned 10% floor. Gemma 3's last training loss was 2.9195, against a held-out loss of 2.9243.
+
+Exact summary values:
+
+| Field | Gemma 3 | LFM2.5 |
+|---|---:|---:|
+| Validation loss | 2.9243141773371413 | 2.970004342650242 |
+| Perplexity | 18.621450656696986 | 19.49200424280426 |
+| Optimizer steps | 9,490 | 9,490 |
+| Train tokens | 4,975,493,120 | 4,975,493,120 |
+| Train seconds | 57,122.41636337076 | 22,025.75809436121 |
+| Tokens/sec | 87,102.28727632207 | 225,894.29606392395 |
+| Validation tokens | 24,993,792 | 24,993,792 |
+| Validation batches | 1,526 | 1,526 |
+
+### Gemma 3 shape and loss curve
+
+Config `configs/training/200m/gemma3_200m.json`: width 832, 18 layers, 4 query heads, 1 key-value head, head dimension 256, feed-forward 2,688. That is three repeats of the 5-local plus 1-global pattern. Parameter count 200,069,440.
+
+Selected held-out points from `metrics.jsonl`. Steps through 1,907 use the smaller validation split.
+
+| Step | Tokens seen | Validation loss | Perplexity |
+|---:|---:|---:|---:|
+| 0 | 0 | 10.9928 | 59,446.72 |
+| 1,907 | 999,817,216 | 3.4453 | 31.35 |
+| 2,000 | 1,048,576,000 | 3.5151 | 33.62 |
+| 4,000 | 2,097,152,000 | 3.1493 | 23.32 |
+| 6,000 | 3,145,728,000 | 3.0144 | 20.38 |
+| 8,000 | 4,194,304,000 | 2.9467 | 19.04 |
+| 9,200 | 4,823,449,600 | 2.9273 | 18.68 |
+| 9,400 | 4,928,307,200 | 2.9252 | 18.64 |
+| 9,490 | 4,975,493,120 | 2.9243 | 18.62 |
+
+### LFM2.5 shape
+
+Config `configs/training/200m/lfm25_200m.json`: width 768, 12 query heads, 6 key-value heads, raw feed-forward 4,992, and all 16 official layer types. Parameter count 194,691,072. Its finished summary is the held-out result above. The run ended at step 9,490 with validation loss 2.9700.
+
+The finished weights are on different Modal accounts. Gemma 3 is on profile `mibrahimsh2006`. LFM2.5 is on profile `muslimonly234-glitch`. Both paths are `/training_sweep/<name>/` on volume `law-slm-training`. Earlier partial checkpoints on other accounts are older than these files.
+
+At the planning rate of $0.001261/second, the summed training-loop time is 79,148 seconds, about 22.0 hours, or about $100. That figure is Gemma 3's 57,122 seconds plus LFM2.5's 22,026 seconds. It does not include validation time, compiles, the corpus build, or the time spent stopped between accounts.
 
 ## What was measured, and what was not
 
@@ -209,15 +267,16 @@ They are not in git. `results/`, checkpoints, and `dataset/` are ignored.
 - 25M and 50M, no copy path: Modal profile `throat-choker`, volume `law-slm-training`, path `/training_sweep/<name>/`
 - 100M, no copy path: Modal profile `shozab-siraiki`, volume `law-slm-training`, path `/training_sweep/<name>/`
 - Copy-path runs: `/training_sweep_copy/<name>/` on `shozab-siraiki` (25M), `abdulrehmanriaz29` (50M), and `spiritwolf786` (100M)
+- Gemma 3 200M, finished: profile `mibrahimsh2006`, volume `law-slm-training`, path `/training_sweep/gemma3_200m/`
+- LFM2.5 200M, finished: profile `muslimonly234-glitch`, volume `law-slm-training`, path `/training_sweep/lfm25_200m/`
 
 Each finished directory contains `summary.json`, `metrics.jsonl`, and `checkpoint.pt`. The 25M and 50M directories also contain `benchmarks.json`.
 
 ## What is next
 
-1. Run HellaSwag, ARC-Easy, and PIQA on the 100M checkpoints. The 25M and 50M scores are already stored. The 100M scores, with and without the copy path, are not.
+1. Run HellaSwag, ARC-Easy, and PIQA on the 100M checkpoints and on the two finished 200M checkpoints. The 25M and 50M scores are already stored. The 100M and 200M scores are not.
 2. Add a generation loop. The models return logits only. There is no `generate()` implementation and no chat command. See below.
-3. Scale Gemma 3, without the copy path, to about 200M parameters at sequence length 8,192. This sweep used 2,048.
-4. Pre-train on the general corpus, then on the legal corpus. Legal-domain training, SFT, and JEV have not started.
+3. Collect the family-law and criminal-law corpora, then pre-train Gemma 3, without the copy path, on that text. The general 5.0 billion token stage is done for Gemma 3 and LFM2.5. SFT and JEV have not started.
 
 ## Read the repository in this order
 
@@ -306,7 +365,7 @@ Start with the plan, then the data, then one model, then the training loop, then
 | `experiments/models.py` | Builds GQA or one of the three registered architectures and checks the parameter count |
 | `experiments/data.py` | Shuffles training windows in a way that can resume at the same example |
 | `experiments/runner.py` | Seeds the run, trains, validates, logs, and writes `summary.json` |
-| `configs/training/` | Twelve JSON files for the original comparison, four architectures at three sizes |
+| `configs/training/` | Twelve JSON files for the original comparison, plus `200m/gemma3_200m.json` and `200m/lfm25_200m.json` |
 | `configs/training_copy/` | The same twelve settings with the copy path turned on |
 
 ### 8. Evaluation — Member C

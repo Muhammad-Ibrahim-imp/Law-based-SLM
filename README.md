@@ -898,7 +898,7 @@ The project will proceed approximately as follows:
 13. Implement the Gemma 3-inspired architecture.
 14. Test architecture variants at approximately 25M, 50M, and 100M parameters.
 15. Compare architecture quality, efficiency, stability, and cost.
-16. Select the architecture based on experimental results. Gemma 3 is the current selection on held-out loss. The 200M run has not started.
+16. Select the architecture based on experimental results. Gemma 3 is the current selection on held-out loss. Its 200M general pre-training is finished.
 17. Scale the selected architecture to approximately 200M parameters.
 18. Train the family-law SLM.
 19. Train the criminal-law SLM.
@@ -912,7 +912,7 @@ The project will proceed approximately as follows:
 
 # 23. Current Status
 
-The 25M, 50M, and 100M training sweep is complete. Gemma 3 is the selected architecture on held-out validation loss. Details, member ownership, and the measured numbers are in `reports/architecture_sweep.md`.
+The 25M, 50M, and 100M training sweep is complete. Gemma 3 and LFM2.5 have also finished general pre-training at about 200M parameters on 5.0 billion tokens. Gemma 3 remains the selected architecture on held-out validation loss. Details, member ownership, and the measured numbers are in `reports/architecture_sweep.md`.
 
 Completed:
 
@@ -924,11 +924,9 @@ Completed:
 Next major stages:
 
 ```text
-100M multiple-choice benchmarks
+100M and 200M multiple-choice benchmarks
       ↓
 Generation loop, then a local chat check
-      ↓
-Scale Gemma 3 to ~200M at sequence length 8,192
       ↓
 ~200M Family-Law SLM
 ~200M Criminal-Law SLM
