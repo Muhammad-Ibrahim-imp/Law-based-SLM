@@ -1,0 +1,30 @@
+name: legal_chat
+description: Private, local-first legal chat workspace.
+publish_to: none
+version: 0.1.0+1
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_markdown_plus: ^1.0.12
+  path_provider: ^2.1.6
+  flutter_secure_storage: ^11.2.0
+  cryptography: ^2.9.0
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+flutter:
+  uses-material-design: true
+  fonts:
+    - family: Tiempos
+      fonts:
+        - asset: assets/fonts/TiemposText-Regular.ttf
+    - family: Styrene
+      fonts:
+        - asset: assets/fonts/Styrene-B-Bold-Regular.ttf
+          weight: 700
+    - family: Fougie
+      fonts:
+        - asset: assets/fonts/Fougie.ttf
