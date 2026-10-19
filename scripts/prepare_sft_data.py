@@ -1,24 +1,24 @@
 """Thin CLI for SFT data prep. Logic lives in data/sft_prep.py and
 data/sft_sources.py.
 
-Sources: smol_smoltalk (conversational), casehold and lawinstruct (legal).
-None of them needs datasets<4.
+Sources: smol_smoltalk (conversational); casehold, lawinstruct and
+reddit_domain (legal). None of them needs datasets<4.
 
-Recommended order (measure first, then build with caps):
+Final 0.4B mix (reports/sft_data.md): build every legal split, then cap
+smol_smoltalk train at 300M minus the kept tokens of casehold + lawinstruct
+train. Rerun any command to resume after a crash:
 
-    # 1. Measure each source (writes nothing): kept/trained tokens, drops, padding
-    python -m scripts.prepare_sft_data --root dataset --source smol_smoltalk --measure
-    python -m scripts.prepare_sft_data --root dataset --source casehold --measure
-    python -m scripts.prepare_sft_data --root dataset --source lawinstruct --measure
-
-    # 2. Build train + test for each (rerun the same command to resume after a crash)
     python -m scripts.prepare_sft_data --root dataset --source casehold --split train
     python -m scripts.prepare_sft_data --root dataset --source casehold --split test
-    python -m scripts.prepare_sft_data --root dataset --source lawinstruct --split train \\
-        --max-tokens <cap from step 1>
-    ...
+    python -m scripts.prepare_sft_data --root dataset --source lawinstruct --split train
+    python -m scripts.prepare_sft_data --root dataset --source lawinstruct --split test
+    python -m scripts.prepare_sft_data --root dataset --source reddit_domain --split train
+    python -m scripts.prepare_sft_data --root dataset --source reddit_domain --split test
+    python -m scripts.prepare_sft_data --root dataset --source smol_smoltalk --split train \
+        --max-tokens <300,000,000 - casehold train - lawinstruct train>
+    python -m scripts.prepare_sft_data --root dataset --source smol_smoltalk --split test
 
-    # 3. Validate and eyeball one row
+    # --measure counts without writing; --validate checks a build and decodes one row
     python -m scripts.prepare_sft_data --root dataset --source casehold --split train --validate
 """
 
@@ -35,6 +35,7 @@ HF_REPOS = {
     "smol_smoltalk": "HuggingFaceTB/smol-smoltalk",
     "casehold": "casehold/casehold",
     "lawinstruct": "lawinstruct/lawinstruct",
+    "reddit_domain": "lawinstruct/lawinstruct",
 }
 
 
@@ -67,6 +68,8 @@ def main() -> None:
     if a.source == "lawinstruct":
         options = {"subsets": [s.strip() for s in a.lawinstruct_subsets.split(",") if s.strip()],
                    "max_per_subset": a.max_per_subset or None}
+    elif a.source == "reddit_domain":   # must match lawinstruct's cap to stay disjoint from it
+        options = {"max_per_subset": a.max_per_subset or None}
 
     cfg = SFTPrepConfig(dataset_root=a.root, source_name=a.source,
                         hf_dataset=HF_REPOS[a.source], split=a.split, seed=a.seed,

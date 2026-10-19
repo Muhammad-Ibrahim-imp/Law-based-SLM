@@ -14,7 +14,8 @@ already aligned, so every stored row is one example.
 
 Several sources (e.g. smol-smoltalk and the law SFT data) can be combined by
 passing several ``(source, split)`` pairs; their blend is set at prep time via
-each source's ``max_tokens``.
+each source's ``max_tokens``. Listing a pair twice repeats that source (the
+final 0.4B mix lists each legal source twice; see reports/sft_data.md).
 """
 
 from __future__ import annotations

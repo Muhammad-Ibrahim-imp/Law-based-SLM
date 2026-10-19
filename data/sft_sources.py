@@ -24,6 +24,9 @@ Splits (``train`` / ``test`` here mean SFT train / SFT held-out):
   clean for Member C's benchmark.
 * LawInstruct ships train only; a deterministic 1% of records (by content
   hash) is held out as ``test``.
+* reddit_domain: RedditLegalQA posts left out by LawInstruct's 50k cap,
+  kept when the domain tagger (``data/domains.py``) marks them family and/or
+  criminal. Same 1% hash split; train is disjoint from ``lawinstruct``.
 
 Legal SFT data is the same for both SLMs (it is general US legal Q&A and
 case-law reasoning, not family/criminal specific).
@@ -36,8 +39,9 @@ import io
 import json
 import lzma
 import random
+import re
 from collections import Counter
-from typing import Iterable, Iterator, Mapping, Sequence
+from typing import Callable, Iterable, Iterator, Mapping, Sequence
 
 SEED_DEFAULT = 1234
 
@@ -169,22 +173,32 @@ LAWINSTRUCT_REPO = "lawinstruct/lawinstruct"
 #     so its train rows can overlap CaseHOLD's test set (eval leakage).
 #   * Non-English or non-US jurisdictions (Swiss, Brazilian, Chinese, Indian, EU, ...).
 #   * Narrow label tasks whose answer is a single class name (little to learn from).
+#   * ValidWills-valid_wills_entailment: answers are yes/no (~5 tokens each).
+#   * CABarExamEssays-MainSubset: each of its 62 records is a whole exam booklet
+#     (all questions + selected answers) in ``answer`` with an empty prompt, and
+#     every one is far longer than 8,192 tokens; there is no question field to use.
 LAWINSTRUCT_SUBSETS = (
     "RedditLegalQA-reddit_legal_qa",
     "StackExchangeQuestionsLegal-stack_exchange_questions_legal",
-    "CABarExamEssays-MainSubset",
     "MCExamsLaw-mc_exams_law_explain",
     "CaseBriefs-case_briefs",
     "OLCMemos-olc_memos",
     "MultiLexSum-long_to_short",
-    "ValidWills-valid_wills_entailment",
 )
 LAWINSTRUCT_TEST_FRACTION = 0.01
 LAWINSTRUCT_MAX_PER_SUBSET = 50_000   # stops RedditLegalQA (by far the largest) dominating
 
 
-def lawinstruct_to_messages(rec: Mapping) -> tuple[list[dict] | None, str | None]:
-    """One raw LawInstruct record -> (messages, None) or (None, skip_reason)."""
+def lawinstruct_to_messages(rec: Mapping, english_instructions: Sequence[str] = ()
+                            ) -> tuple[list[dict] | None, str | None]:
+    """One raw LawInstruct record -> (messages, None) or (None, skip_reason).
+
+    LawInstruct machine-translates ~95% of its instructions into 23 other EU
+    languages (``instruction_language``); the prompt and answer stay English.
+    A non-English instruction is replaced by one of the subset's own English
+    instructions (picked by a stable hash of the prompt), or dropped when the
+    subset has none, so every user turn is English.
+    """
     if (rec.get("answer_language") or "en") != "en" or (rec.get("prompt_language") or "en") != "en":
         return None, "not_english"
     answer = (rec.get("answer") or "").strip()
@@ -192,6 +206,14 @@ def lawinstruct_to_messages(rec: Mapping) -> tuple[list[dict] | None, str | None
         return None, "no_answer"
     instruction = (rec.get("instruction") or "").strip()
     prompt = (rec.get("prompt") or "").strip()
+    if _EMPTY_QUESTION.fullmatch(prompt):
+        # CaseBriefs and OLCMemos ship an empty prompt with the question inside the answer.
+        prompt, answer = _split_embedded_question(rec.get("dataset_name") or "", answer)
+        if not prompt and rec.get("dataset_name") == "RedditLegalQA":
+            return None, "empty_question"   # "Question:" with no post
+    if (rec.get("instruction_language") or "en") != "en":
+        instruction = (english_instructions[_h("li-instr", prompt) % len(english_instructions)]
+                       if english_instructions else "")
     user = "\n\n".join(p for p in (instruction, prompt) if p)
     if not user:
         return None, "no_prompt"
@@ -201,6 +223,65 @@ def lawinstruct_to_messages(rec: Mapping) -> tuple[list[dict] | None, str | None
 def lawinstruct_split_of(subset: str, messages: Sequence[Mapping]) -> str:
     key = _h("lawinstruct-split", subset, messages[0]["content"], messages[1]["content"])
     return "test" if key < LAWINSTRUCT_TEST_FRACTION * (1 << 64) else "train"
+
+
+_EMPTY_QUESTION = re.compile(r"\s*(?:question\s*:)?\s*", re.I)
+_CASEBRIEF = re.compile(r"\s*Question:\s*(.+?)\n\s*Analysis:\s*(.+)", re.S)
+
+
+def _split_embedded_question(dataset: str, answer: str) -> tuple[str, str]:
+    """(question, answer) for subsets whose question sits inside the answer; ("", answer) otherwise.
+    CaseBriefs: "Question: <facts + issue>\\nAnalysis: <analysis>".
+    OLCMemos: the opening block (title + headnote) becomes the research question."""
+    if dataset == "CaseBriefs" and (m := _CASEBRIEF.match(answer)):
+        return m.group(1).strip(), m.group(2).strip()
+    if dataset == "OLCMemos" and "\n\n" in answer:
+        head, body = answer.split("\n\n", 1)
+        if head.strip() and body.strip():
+            return " ".join(head.split()), body.strip()
+    return "", answer
+
+
+def english_instructions_of(rows: Iterable[Mapping]) -> list[str]:
+    """The distinct English instructions of one subset, sorted (deterministic)."""
+    return sorted({(r.get("instruction") or "").strip() for r in rows
+                   if (r.get("instruction_language") or "en") == "en" and (r.get("instruction") or "").strip()})
+
+
+def _lawinstruct_candidates(subset: str, split: str, rows: Callable[[], Iterable[Mapping]]
+                            ) -> tuple[list[dict], Counter]:
+    """All usable, de-duplicated examples of one subset in ``split``, in file order.
+    ``rows()`` is called twice: once to collect the English instructions, once to convert."""
+    c = Counter()
+    seen: set[int] = set()
+    kept: list[dict] = []
+    english = english_instructions_of(rows())
+    c["english_instructions"] = len(english)
+    for rec in rows():
+        c["read"] += 1
+        if (rec.get("instruction_language") or "en") != "en":
+            c["instruction_replaced"] += 1
+        msgs, why = lawinstruct_to_messages(rec, english)
+        if msgs is None:
+            c[f"skipped_{why}"] += 1
+            continue
+        dup = _h(msgs[0]["content"], msgs[1]["content"])
+        if dup in seen:
+            c["skipped_duplicate"] += 1
+            continue
+        seen.add(dup)
+        if lawinstruct_split_of(subset, msgs) != split:
+            continue
+        kept.append({"messages": msgs, "source": subset})
+    return kept, c
+
+
+def _lawinstruct_cap(n: int, seed: int, subset: str, max_per_subset: int | None) -> list[int] | None:
+    """Indices of the seeded per-subset sample, or None when there is no cap to apply.
+    ``Random.sample`` picks the same indices for ``range(n)`` as for any length-n list."""
+    if max_per_subset is None or n <= max_per_subset:
+        return None
+    return random.Random(_h(str(seed), subset)).sample(range(n), max_per_subset)
 
 
 def load_lawinstruct(split: str, seed: int = SEED_DEFAULT,
@@ -216,33 +297,68 @@ def load_lawinstruct(split: str, seed: int = SEED_DEFAULT,
                     "subsets": {}}
     out = []
     for subset in subsets:
-        rows = records[subset] if records is not None else _read_lawinstruct_subset(subset)
-        c = Counter()
-        seen: set[int] = set()
-        kept: list[dict] = []
-        for rec in rows:
-            c["read"] += 1
-            msgs, why = lawinstruct_to_messages(rec)
-            if msgs is None:
-                c[f"skipped_{why}"] += 1
-                continue
-            dup = _h(msgs[0]["content"], msgs[1]["content"])
-            if dup in seen:
-                c["skipped_duplicate"] += 1
-                continue
-            seen.add(dup)
-            if lawinstruct_split_of(subset, msgs) != split:
-                continue
-            kept.append({"messages": msgs, "source": subset})
+        rows = (lambda s=subset: records[s]) if records is not None else (lambda s=subset: _read_lawinstruct_subset(s))
+        kept, c = _lawinstruct_candidates(subset, split, rows)
         # Cap per subset with a seeded sample (not "first N"), then record counts.
-        if max_per_subset is not None and len(kept) > max_per_subset:
-            c["skipped_over_cap"] += len(kept) - max_per_subset
-            kept = random.Random(_h(str(seed), subset)).sample(kept, max_per_subset)
+        idx = _lawinstruct_cap(len(kept), seed, subset, max_per_subset)
+        if idx is not None:
+            c["skipped_over_cap"] += len(kept) - len(idx)
+            kept = [kept[i] for i in idx]
         c["kept"] = len(kept)
         report["subsets"][subset] = dict(c)
         out.extend(kept)
     report["kept"] = len(out)
     return _shuffled(out, seed), report
+
+
+# ===================================================================== reddit_domain
+REDDIT_SUBSET = "RedditLegalQA-reddit_legal_qa"
+REDDIT_DOMAINS = ("family", "criminal")
+
+
+def load_reddit_domain(split: str, seed: int = SEED_DEFAULT,
+                       max_per_subset: int | None = LAWINSTRUCT_MAX_PER_SUBSET,
+                       records: Iterable[Mapping] | None = None):
+    """Family- and criminal-tagged RedditLegalQA posts that ``lawinstruct`` does not use.
+
+    train: the complement of the exact seeded 50k sample ``load_lawinstruct``
+    keeps (same seed, same skips, same 1% hash split), filtered to posts the
+    domain tagger marks family and/or criminal. Disjoint from ``lawinstruct``.
+    test: the Reddit test split is far below the cap, so ``lawinstruct`` keeps
+    all of it and the complement would be empty; instead this is the
+    family/criminal-tagged part of the Reddit test split (a subset of
+    ``lawinstruct``'s test, still disjoint from every train split).
+    Tagging uses the user turn with ``data.domains.profile_for`` (short profile
+    for posts up to 4,000 chars, loose above).
+    """
+    from data.domains import classify, profile_for
+
+    if split not in ("train", "test"):
+        raise ValueError("split must be 'train' or 'test'")
+    rows = (lambda: records) if records is not None else (lambda: _read_lawinstruct_subset(REDDIT_SUBSET))
+    kept, c = _lawinstruct_candidates(REDDIT_SUBSET, split, rows)
+    if split == "train":
+        idx = _lawinstruct_cap(len(kept), seed, REDDIT_SUBSET, max_per_subset)
+        used = set(idx) if idx is not None else set(range(len(kept)))
+        c["in_lawinstruct_sample"] = len(used)
+        pool = [ex for i, ex in enumerate(kept) if i not in used]
+    else:
+        pool = kept
+    c["pool"] = len(pool)
+    out = []
+    for ex in pool:
+        user = ex["messages"][0]["content"]
+        tags = classify(user, profile_for(user)) & set(REDDIT_DOMAINS)
+        if not tags:
+            c["skipped_other_domain"] += 1
+            continue
+        label = "both" if len(tags) == 2 else tags.pop()
+        c[f"kept_{label}"] += 1
+        out.append({"messages": ex["messages"], "source": f"reddit_domain:{label}"})
+    c["kept"] = len(out)
+    return _shuffled(out, seed), {
+        "dataset": LAWINSTRUCT_REPO, "subset": REDDIT_SUBSET, "split_rule": "lawinstruct 1% content hash",
+        "max_per_subset": max_per_subset, "tagger": "data.domains short/loose (profile_for)", **c}
 
 
 def _read_lawinstruct_subset(subset: str) -> Iterator[dict]:
@@ -274,6 +390,7 @@ SOURCES = {
     "smol_smoltalk": load_smol_smoltalk,
     "casehold": load_casehold,
     "lawinstruct": load_lawinstruct,
+    "reddit_domain": load_reddit_domain,
 }
 
 LICENCES = {
@@ -282,6 +399,8 @@ LICENCES = {
     "lawinstruct": "LawInstruct tagged MIT, but each upstream subset keeps its own licence "
                    "(Reddit / StackExchange / bar-exam content is not cleared for commercial use) "
                    "- academic use only, like Pile of Law",
+    "reddit_domain": "RedditLegalQA via LawInstruct: Reddit content, not cleared for commercial use "
+                     "- academic use only",
 }
 
 

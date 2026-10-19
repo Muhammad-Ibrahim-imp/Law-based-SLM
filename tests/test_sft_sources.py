@@ -7,7 +7,7 @@ import pytest
 from data.sft_prep import SFTPrepConfig, build_sft_split, validate_sft_split
 from data.sft_sources import (
     casehold_to_messages, lawinstruct_split_of, lawinstruct_to_messages,
-    load_casehold, load_lawinstruct, load_source,
+    load_casehold, load_lawinstruct, load_reddit_domain, load_source,
 )
 from tests.fake_tokenizer import FakeTokenizer
 
@@ -94,6 +94,33 @@ def test_lawinstruct_split_disjoint_dedup_and_cap():
     assert capped == again                               # seeded, reproducible
 
 
+def test_lawinstruct_non_english_instruction_replaced_with_english_one():
+    en = {**li_rec(1), "instruction": "Answer like a Reddit comment.", "instruction_language": "en"}
+    lt = {**li_rec(2), "instruction": "Atsakykite i si klausima.", "instruction_language": "lt"}
+    train, rep = load_lawinstruct("train", subsets=["A-a"], max_per_subset=None,
+                                  records={"A-a": [en, lt] * 1 + [{**lt, "prompt": f"Q{i}"} for i in range(50)]})
+    users = [e["messages"][0]["content"] for e in train]
+    assert users and all(u.startswith("Answer like a Reddit comment.") for u in users)
+    assert not any("Atsakykite" in u for u in users)
+    assert rep["subsets"]["A-a"]["instruction_replaced"] == 51
+    msgs, _ = lawinstruct_to_messages(lt)                 # no English instruction known -> prompt only
+    assert msgs[0]["content"] == lt["prompt"]
+
+
+def test_lawinstruct_embedded_questions_and_empty_reddit_posts():
+    brief = {**li_rec(1, "CaseBriefs-case_briefs"), "dataset_name": "CaseBriefs", "prompt": "",
+             "answer": "Question: Plaintiff photographed X. Is posting it fair use?\nAnalysis: The court weighed the factors."}
+    msgs, _ = lawinstruct_to_messages(brief)
+    assert msgs[0]["content"].endswith("Is posting it fair use?") and msgs[1]["content"] == "The court weighed the factors."
+    memo = {**li_rec(2, "OLCMemos-olc_memos"), "dataset_name": "OLCMemos", "prompt": "",
+            "answer": "Authority of the Customs Service\nThe Service lacks authority.\n\nMEMORANDUM OPINION\nBody."}
+    msgs, _ = lawinstruct_to_messages(memo)
+    assert msgs[0]["content"].endswith("Authority of the Customs Service The Service lacks authority.")
+    assert msgs[1]["content"] == "MEMORANDUM OPINION\nBody."
+    empty = {**li_rec(3), "dataset_name": "RedditLegalQA", "prompt": "Question: "}
+    assert lawinstruct_to_messages(empty) == (None, "empty_question")
+
+
 def test_lawinstruct_split_is_stable():
     m = lawinstruct_to_messages(li_rec(5))[0]
     assert lawinstruct_split_of("X-y", m) == lawinstruct_split_of("X-y", m)
@@ -102,6 +129,50 @@ def test_lawinstruct_split_is_stable():
 def test_default_subsets_exclude_casehold_derived():
     from data.sft_sources import LAWINSTRUCT_SUBSETS
     assert not [s for s in LAWINSTRUCT_SUBSETS if "case_hold" in s or "casehold" in s]
+
+
+def test_default_subsets_drop_validwills_and_cabar():
+    from data.sft_sources import LAWINSTRUCT_SUBSETS
+    assert not [s for s in LAWINSTRUCT_SUBSETS if s.startswith(("ValidWills", "CABarExamEssays"))]
+
+
+# ---------------------------------------------------------------- reddit_domain
+REDDIT = "RedditLegalQA-reddit_legal_qa"
+_TOPICS = ["My ex wants full custody of our kids after the divorce.",
+           "I was arrested for shoplifting and have a court date next week.",
+           "My landlord will not return my security deposit."]
+
+
+def reddit_rec(i):
+    return {**li_rec(i, REDDIT), "prompt": f"Post {i}: {_TOPICS[i % 3]}"}
+
+
+def test_reddit_domain_is_disjoint_from_lawinstruct_sample():
+    recs = [reddit_rec(i) for i in range(900)]
+    li, _ = load_lawinstruct("train", subsets=[REDDIT], max_per_subset=300, records={REDDIT: recs})
+    rd, rep = load_source("reddit_domain", "train", max_per_subset=300, records=recs)
+    used = {e["messages"][0]["content"] for e in li}
+    got = {e["messages"][0]["content"] for e in rd}
+    assert len(li) == 300 and got and not used & got           # disjoint from the 50k-style sample
+    assert rep["in_lawinstruct_sample"] == 300
+    assert rep["pool"] == rep["kept"] + rep["skipped_other_domain"]
+    # the pool is exactly the complement: every train example is in one of the two
+    _, rep_all = load_lawinstruct("train", subsets=[REDDIT], max_per_subset=None, records={REDDIT: recs})
+    assert rep["pool"] + 300 == rep_all["subsets"][REDDIT]["kept"]
+    assert all("landlord" not in c for c in got)               # "other" posts are dropped
+    assert {e["source"] for e in rd} <= {"reddit_domain:family", "reddit_domain:criminal",
+                                         "reddit_domain:both"}
+    assert rep["kept_family"] and rep["kept_criminal"] and "academic" in rep["licence"]
+
+
+def test_reddit_domain_without_cap_has_no_train_and_test_is_tagged_test_split():
+    recs = [reddit_rec(i) for i in range(900)]
+    rd, rep = load_reddit_domain("train", max_per_subset=None, records=recs)
+    assert rd == [] and rep["pool"] == 0                       # lawinstruct uses everything
+    test, _ = load_reddit_domain("test", records=recs)
+    li_test, _ = load_lawinstruct("test", subsets=[REDDIT], records={REDDIT: recs})
+    tagged = {e["messages"][0]["content"] for e in test}
+    assert tagged and tagged <= {e["messages"][0]["content"] for e in li_test}
 
 
 # ---------------------------------------------------------------- end to end
