@@ -45,6 +45,14 @@ from typing import Callable, Iterable, Iterator, Mapping, Sequence
 
 SEED_DEFAULT = 1234
 
+# Upstream revisions the reference SFT build used (20 Oct 2026), so a rebuild on Modal reads
+# exactly the same data even if a dataset changes upstream. casehold = its refs/convert/parquet commit.
+REVISIONS = {
+    "smol_smoltalk": "f73fe857d519ff6ac5af2ea67c4d3834da7b8bcc",
+    "casehold": "8a4dbd58704b80b9433264ce9c66421fc5bf6c19",
+    "lawinstruct": "578e100783654ba791e55e5ebaaac343c66f408d",
+}
+
 
 def _h(*parts: str) -> int:
     """Stable 64-bit hash (Python's hash() is salted per process)."""
@@ -126,12 +134,13 @@ def casehold_to_messages(row: Mapping) -> list[dict] | None:
     return [{"role": "user", "content": user}, {"role": "assistant", "content": assistant}]
 
 
-def load_casehold(split: str, seed: int = SEED_DEFAULT, rows: Iterable[Mapping] | None = None):
-    """``rows`` lets tests pass synthetic rows; normally read from the Hub."""
+def load_casehold(split: str, seed: int = SEED_DEFAULT, rows: Iterable[Mapping] | None = None,
+                  revision: str = REVISIONS["casehold"]):
+    """``rows`` lets tests pass synthetic rows; normally read from the Hub at ``revision``."""
     if split not in CASEHOLD_SPLITS:
         raise ValueError(f"split must be one of {sorted(CASEHOLD_SPLITS)}")
     if rows is None:
-        rows = _read_casehold_parquet(CASEHOLD_SPLITS[split])
+        rows = _read_casehold_parquet(CASEHOLD_SPLITS[split], revision)
     report = Counter()
     out = []
     for row in rows:
@@ -143,16 +152,16 @@ def load_casehold(split: str, seed: int = SEED_DEFAULT, rows: Iterable[Mapping] 
         out.append({"messages": msgs, "source": "casehold"})
     report["kept"] = len(out)
     return _shuffled(out, seed), {
-        "dataset": CASEHOLD_REPO, "upstream_split": CASEHOLD_SPLITS[split],
+        "dataset": CASEHOLD_REPO, "upstream_split": CASEHOLD_SPLITS[split], "revision": revision,
         "read_via": "refs/convert/parquet (no loading script)", **report}
 
 
-def _read_casehold_parquet(upstream_split: str) -> Iterator[dict]:
+def _read_casehold_parquet(upstream_split: str, revision: str = REVISIONS["casehold"]) -> Iterator[dict]:
     import pyarrow.parquet as pq
     from huggingface_hub import HfFileSystem
 
     fs = HfFileSystem()
-    pattern = f"datasets/{CASEHOLD_REPO}@refs%2Fconvert%2Fparquet/all/{upstream_split}/*.parquet"
+    pattern = f"datasets/{CASEHOLD_REPO}@{revision}/all/{upstream_split}/*.parquet"
     paths = sorted(fs.glob(pattern))
     if not paths:
         raise FileNotFoundError(f"no CaseHOLD parquet files match {pattern}")
@@ -287,17 +296,20 @@ def _lawinstruct_cap(n: int, seed: int, subset: str, max_per_subset: int | None)
 def load_lawinstruct(split: str, seed: int = SEED_DEFAULT,
                      subsets: Sequence[str] = LAWINSTRUCT_SUBSETS,
                      max_per_subset: int | None = LAWINSTRUCT_MAX_PER_SUBSET,
-                     records: Mapping[str, Iterable[Mapping]] | None = None):
+                     records: Mapping[str, Iterable[Mapping]] | None = None,
+                     revision: str = REVISIONS["lawinstruct"]):
     """``records`` maps subset -> iterable of raw records (for tests);
-    normally read from the Hub."""
+    normally read from the Hub at ``revision``."""
     if split not in ("train", "test"):
         raise ValueError("split must be 'train' or 'test'")
-    report: dict = {"dataset": LAWINSTRUCT_REPO, "read_via": "data/*.jsonl.xz (no loading script)",
+    report: dict = {"dataset": LAWINSTRUCT_REPO, "revision": revision,
+                    "read_via": "data/*.jsonl.xz (no loading script)",
                     "test_fraction": LAWINSTRUCT_TEST_FRACTION, "max_per_subset": max_per_subset,
                     "subsets": {}}
     out = []
     for subset in subsets:
-        rows = (lambda s=subset: records[s]) if records is not None else (lambda s=subset: _read_lawinstruct_subset(s))
+        rows = ((lambda s=subset: records[s]) if records is not None
+                else (lambda s=subset: _read_lawinstruct_subset(s, revision)))
         kept, c = _lawinstruct_candidates(subset, split, rows)
         # Cap per subset with a seeded sample (not "first N"), then record counts.
         idx = _lawinstruct_cap(len(kept), seed, subset, max_per_subset)
@@ -318,7 +330,8 @@ REDDIT_DOMAINS = ("family", "criminal")
 
 def load_reddit_domain(split: str, seed: int = SEED_DEFAULT,
                        max_per_subset: int | None = LAWINSTRUCT_MAX_PER_SUBSET,
-                       records: Iterable[Mapping] | None = None):
+                       records: Iterable[Mapping] | None = None,
+                       revision: str = REVISIONS["lawinstruct"]):
     """Family- and criminal-tagged RedditLegalQA posts that ``lawinstruct`` does not use.
 
     train: the complement of the exact seeded 50k sample ``load_lawinstruct``
@@ -335,7 +348,7 @@ def load_reddit_domain(split: str, seed: int = SEED_DEFAULT,
 
     if split not in ("train", "test"):
         raise ValueError("split must be 'train' or 'test'")
-    rows = (lambda: records) if records is not None else (lambda: _read_lawinstruct_subset(REDDIT_SUBSET))
+    rows = (lambda: records) if records is not None else (lambda: _read_lawinstruct_subset(REDDIT_SUBSET, revision))
     kept, c = _lawinstruct_candidates(REDDIT_SUBSET, split, rows)
     if split == "train":
         idx = _lawinstruct_cap(len(kept), seed, REDDIT_SUBSET, max_per_subset)
@@ -357,20 +370,21 @@ def load_reddit_domain(split: str, seed: int = SEED_DEFAULT,
         out.append({"messages": ex["messages"], "source": f"reddit_domain:{label}"})
     c["kept"] = len(out)
     return _shuffled(out, seed), {
-        "dataset": LAWINSTRUCT_REPO, "subset": REDDIT_SUBSET, "split_rule": "lawinstruct 1% content hash",
+        "dataset": LAWINSTRUCT_REPO, "revision": revision, "subset": REDDIT_SUBSET,
+        "split_rule": "lawinstruct 1% content hash",
         "max_per_subset": max_per_subset, "tagger": "data.domains short/loose (profile_for)", **c}
 
 
-def _read_lawinstruct_subset(subset: str) -> Iterator[dict]:
+def _read_lawinstruct_subset(subset: str, revision: str = REVISIONS["lawinstruct"]) -> Iterator[dict]:
     from huggingface_hub import HfApi, hf_hub_download
 
     prefix = f"data/{subset}-train-"
-    files = sorted(f for f in HfApi().list_repo_files(LAWINSTRUCT_REPO, repo_type="dataset")
+    files = sorted(f for f in HfApi().list_repo_files(LAWINSTRUCT_REPO, repo_type="dataset", revision=revision)
                    if f.startswith(prefix) and f.endswith(".jsonl.xz"))
     if not files:
         raise FileNotFoundError(f"LawInstruct subset {subset!r} not found ({prefix}*.jsonl.xz)")
     for fname in files:
-        path = hf_hub_download(LAWINSTRUCT_REPO, fname, repo_type="dataset")
+        path = hf_hub_download(LAWINSTRUCT_REPO, fname, repo_type="dataset", revision=revision)
         with lzma.open(path, "rb") as raw, io.TextIOWrapper(raw, encoding="utf-8") as f:
             for line in f:
                 if line.strip():
@@ -378,11 +392,11 @@ def _read_lawinstruct_subset(subset: str) -> Iterator[dict]:
 
 
 # ===================================================================== smol-smoltalk
-def load_smol_smoltalk(split: str, seed: int = SEED_DEFAULT):
+def load_smol_smoltalk(split: str, seed: int = SEED_DEFAULT, revision: str = REVISIONS["smol_smoltalk"]):
     from datasets import load_dataset
-    ds = load_dataset("HuggingFaceTB/smol-smoltalk", split=split)
+    ds = load_dataset("HuggingFaceTB/smol-smoltalk", split=split, revision=revision)
     return ds.shuffle(seed=seed).flatten_indices(), {
-        "dataset": "HuggingFaceTB/smol-smoltalk", "upstream_split": split, "rows": len(ds)}
+        "dataset": "HuggingFaceTB/smol-smoltalk", "upstream_split": split, "revision": revision, "rows": len(ds)}
 
 
 # ===================================================================== registry

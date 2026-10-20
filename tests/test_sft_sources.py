@@ -194,3 +194,39 @@ def test_casehold_and_lawinstruct_build_and_validate(tmp_path):
     assert entry["stats"]["examples_kept"] == 200
     assert "academic" in entry["source_info"]["licence"]
     validate_sft_split(tmp_path, "lawinstruct", "train")
+
+
+# ---------------------------------------------------------------- pinned upstream revisions
+def test_loaders_pass_pinned_or_given_revision(monkeypatch):
+    import data.sft_sources as ss
+    seen = []
+    monkeypatch.setattr(ss, "_read_casehold_parquet", lambda split, revision: seen.append(("casehold", revision)) or [])
+    monkeypatch.setattr(ss, "_read_lawinstruct_subset", lambda subset, revision: seen.append(("li", revision)) or [])
+    ss.load_casehold("test")
+    ss.load_casehold("test", revision="abc")
+    ss.load_lawinstruct("test", subsets=["A-a"])
+    ss.load_reddit_domain("test", revision="def")
+    # (LawInstruct subsets are read twice: English instructions first, then conversion)
+    assert set(seen) == {("casehold", ss.REVISIONS["casehold"]), ("casehold", "abc"),
+                         ("li", ss.REVISIONS["lawinstruct"]), ("li", "def")}
+    assert all(len(r) == 40 for r in ss.REVISIONS.values())          # full commit SHAs
+
+
+def test_smol_smoltalk_passes_revision(monkeypatch):
+    import sys
+    import types
+
+    import data.sft_sources as ss
+    calls = {}
+
+    class FakeDS(list):
+        def shuffle(self, seed):
+            return self
+
+        def flatten_indices(self):
+            return self
+
+    fake = types.SimpleNamespace(load_dataset=lambda name, split, revision: calls.update(revision=revision) or FakeDS([1]))
+    monkeypatch.setitem(sys.modules, "datasets", fake)
+    _, info = ss.load_smol_smoltalk("test")
+    assert calls["revision"] == ss.REVISIONS["smol_smoltalk"] == info["revision"]
