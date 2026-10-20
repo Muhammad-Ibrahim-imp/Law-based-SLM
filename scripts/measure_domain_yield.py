@@ -40,7 +40,8 @@ SEED = 42
 # ---------------------------------------------------------------- keywords
 # Keyword lists, matching rules and thresholds live in data/domains.py (shared with SFT prep).
 from data.domains import (  # noqa: E402
-    DOMAIN_COLS, DOMAINS, NOT_AFTER, TERM_LIST, TERM_RES, TERMS, term_counts,
+    DOMAIN_COLS, DOMAINS, FAMILY_HEADING, FAMILY_HEADING_EXCLUDE, HEADING_RE, LEVEL, NOT_AFTER,
+    SECTION_RE, TAX_HEADING, TAX_HEADING_EXCLUDE, TERM_LIST, TERM_RES, TERMS, split_state_code, term_counts,
     PROFILES as THRESHOLDS, classify_counts as classify,
 )
 
@@ -260,7 +261,6 @@ def stage_pol_tax():
     return result
 
 
-SECTION_RE = re.compile(r"\n(?=[ \t]*(?:§|�)+\s*\d)")  # § is sometimes mojibake (U+FFFD)
 
 
 def stage_title26():
@@ -290,49 +290,6 @@ def stage_title26():
         }
         log(f"title26 {sub}: {len(records)} records, {result[sub]['unique_tokens'] / 1e6:.1f}M unique tokens")
     return result
-
-
-HEADING_RE = re.compile(
-    r"^[ \t]*(title|division|book|subtitle|chapter|part|article)\s+([0-9]+[\w.\-]*|[ivxlc]+\b)[^\n]{0,200}$",
-    re.I | re.M)
-LEVEL = {"title": 0, "division": 0, "book": 0, "subtitle": 1, "chapter": 2, "part": 3, "article": 4}
-FAMILY_HEADING = re.compile(
-    r"domestic relations|marriage|marital|married persons|husband and wife|divorce|dissolution of marriage"
-    r"|annulment|separate maintenance|alimony|spousal (?:support|maintenance)|child support|support of (?:minor )?children"
-    r"|custody of (?:minor )?child|child custody|custody and visitation|parenting|time-sharing|visitation"
-    r"|parent and child|parentage|paternity|adoption of (?:minors|children|a child|adults)|adoption code|adoptions?\s*$"
-    r"|termination of parental|parental rights|premarital|prenuptial|family law|family code|domestic partner"
-    r"|guardianship of minors|uniform interstate family|uniform child custody", re.I)
-FAMILY_HEADING_EXCLUDE = re.compile(
-    r"therap|counsel|famil(?:y|ies) (?:farm|services|planning|investment|relief|child care|support services|resource)"
-    r"|single-family|department of|license|tax|offenses against"
-    # added after the heading review: education, time-share property, prison/DUI/nursing visitation, gift deduction
-    r"|student|educat|real estate time|vacation time|drunk|censorship|home visitation|deduction", re.I)
-
-
-def split_state_code(text, heading=FAMILY_HEADING, exclude=FAMILY_HEADING_EXCLUDE):
-    """Yield (chunk_text, in_domain, setting_heading). A heading that matches
-    `heading` (and not `exclude`) marks everything up to the next heading of the
-    same or a higher level (title > subtitle > chapter > part > article)."""
-    heads = list(HEADING_RE.finditer(text))
-    stack = {}  # level -> heading text that set the family flag
-    for i, m in enumerate(heads):
-        lvl = LEVEL[m.group(1).lower()]
-        for k in [k for k in stack if k >= lvl]:
-            del stack[k]
-        h = m.group(0).strip()
-        if heading.search(h) and not exclude.search(h):
-            stack[lvl] = h
-        end = heads[i + 1].start() if i + 1 < len(heads) else len(text)
-        chunk = text[m.start():end]
-        setter = stack[min(stack)] if stack else None
-        yield chunk, setter is not None, setter
-
-
-TAX_HEADING = re.compile(
-    r"taxation|\btax(?:es)?\b|revenue|assessment of property|ad valorem|tax court|tax appeals|tax tribunal", re.I)
-TAX_HEADING_EXCLUDE = re.compile(
-    r"revenue bonds?|tax increment|tax-exempt bond|lottery|gaming revenue|famil|marriage|divorce", re.I)
 
 
 def stage_state_family():

@@ -178,3 +178,69 @@ def classify(text: str, profile: str = "short") -> set[str]:
 def profile_for(text: str) -> str:
     """The profile to use for one SFT text: short below SHORT_MAX_CHARS, loose above."""
     return "short" if len(text) <= SHORT_MAX_CHARS else "loose"
+
+
+# ---------------------------------------------------------------- statutes by heading
+# State codes have no domain field: a heading (Title/Chapter/...) whose text matches a
+# domain list marks everything under it. Lists reviewed on the top headings by size
+# (results/domain_measurement/REPORT.md for family/tax, results/legal_prep/REPORT.md
+# for criminal).
+SECTION_RE = re.compile(r"\n(?=[ \t]*(?:§|�)+\s*\d)")  # § is sometimes mojibake (U+FFFD)
+
+HEADING_RE = re.compile(
+    r"^[ \t]*(title|division|book|subtitle|chapter|part|article)\s+([0-9]+[\w.\-]*|[ivxlc]+\b)[^\n]{0,200}$",
+    re.I | re.M)
+LEVEL = {"title": 0, "division": 0, "book": 0, "subtitle": 1, "chapter": 2, "part": 3, "article": 4}
+FAMILY_HEADING = re.compile(
+    r"domestic relations|marriage|marital|married persons|husband and wife|divorce|dissolution of marriage"
+    r"|annulment|separate maintenance|alimony|spousal (?:support|maintenance)|child support|support of (?:minor )?children"
+    r"|custody of (?:minor )?child|child custody|custody and visitation|parenting|time-sharing|visitation"
+    r"|parent and child|parentage|paternity|adoption of (?:minors|children|a child|adults)|adoption code|adoptions?\s*$"
+    r"|termination of parental|parental rights|premarital|prenuptial|family law|family code|domestic partner"
+    r"|guardianship of minors|uniform interstate family|uniform child custody", re.I)
+FAMILY_HEADING_EXCLUDE = re.compile(
+    r"therap|counsel|famil(?:y|ies) (?:farm|services|planning|investment|relief|child care|support services|resource)"
+    r"|single-family|department of|license|tax|offenses against"
+    # added after the heading review: education, time-share property, prison/DUI/nursing visitation, gift deduction
+    r"|student|educat|real estate time|vacation time|drunk|censorship|home visitation|deduction", re.I)
+
+
+def split_state_code(text, heading=FAMILY_HEADING, exclude=FAMILY_HEADING_EXCLUDE):
+    """Yield (chunk_text, in_domain, setting_heading). A heading that matches
+    `heading` (and not `exclude`) marks everything up to the next heading of the
+    same or a higher level (title > subtitle > chapter > part > article)."""
+    heads = list(HEADING_RE.finditer(text))
+    stack = {}  # level -> heading text that set the family flag
+    for i, m in enumerate(heads):
+        lvl = LEVEL[m.group(1).lower()]
+        for k in [k for k in stack if k >= lvl]:
+            del stack[k]
+        h = m.group(0).strip()
+        if heading.search(h) and not exclude.search(h):
+            stack[lvl] = h
+        end = heads[i + 1].start() if i + 1 < len(heads) else len(text)
+        chunk = text[m.start():end]
+        setter = stack[min(stack)] if stack else None
+        yield chunk, setter is not None, setter
+
+
+TAX_HEADING = re.compile(
+    r"taxation|\btax(?:es)?\b|revenue|assessment of property|ad valorem|tax court|tax appeals|tax tribunal", re.I)
+TAX_HEADING_EXCLUDE = re.compile(
+    r"revenue bonds?|tax increment|tax-exempt bond|lottery|gaming revenue|famil|marriage|divorce", re.I)
+
+
+CRIMINAL_HEADING = re.compile(
+    r"\bcrim(?:e|es|inal)\b|penal (?:code|law)|\boffen[cs]es\b|sentenc|punishment|corrections?\b"
+    r"|probation|parole|controlled substances?|homicide|assault|larceny|theft|burglary|robbery"
+    r"|sex(?:ual)? (?:offen|assault|abuse)|weapons|firearms|narcotic|indictment|arrest|bail\b"
+    r"|extradition|habeas corpus|juvenile delinquen|driving under the influence|search warrant"
+    r"|victims? of crime|crime victims?|prosecution|criminal procedure|jury trial", re.I)
+CRIMINAL_HEADING_EXCLUDE = re.compile(
+    r"\bcivil\b|commission|department of|board of|licens|\btax|insurance|unemployment|workers'? comp"
+    r"|retirement|pension|appropriation|\bfund\b|\bgrants?\b|food|cosmetic|pharmac|fish|game|wildlife"
+    r"|hunting|boating|alcoholic beverage control|criminal justice information|uniform commercial"
+    # added once after the top-heading review (results/legal_prep/REPORT.md): body sentences parsed
+    # as headings ("Article 5 of the ... Act shall ...", "Title 16, Section ..."), vehicle titling
+    r"|^\s*\w+\s+[\w.\-]+,?\s+(?:of|section)\b|\bshall\b|may be cited|\(relating to"
+    r"|technical corrections|certificate of title|anti-?theft|abandoned vehicles|accidents", re.I)
