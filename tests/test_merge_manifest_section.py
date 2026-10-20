@@ -36,3 +36,15 @@ def test_merge_refuses_other_tokenizer_and_missing_section(tmp_path):
 def test_merge_into_empty_target_copies_header(tmp_path):
     out = merge_section({**HEADER, "categories": {"sft": {"a": 1}}}, tmp_path / "new")
     assert out["tokenizer_fingerprint"] == "fp1" and out["categories"] == {"sft": {"a": 1}}
+
+
+def test_merge_several_categories_atomically(tmp_path):
+    from scripts.merge_manifest_section import merge_sections
+    dst = tmp_path / "remote"
+    write(dst, {**HEADER, "categories": {"general_train": {"g": 1}}})
+    src = {**HEADER, "categories": {"family_law_train": {"f": 1}, "criminal_law_train": {"c": 1}}}
+    out = merge_sections(src, dst, ["family_law_train", "criminal_law_train"])
+    assert set(out["categories"]) == {"general_train", "family_law_train", "criminal_law_train"}
+    with pytest.raises(ValueError, match="family_law_validation"):
+        merge_sections(src, dst, ["criminal_law_train", "family_law_validation"])   # nothing written
+    assert json.loads((dst / "manifest.json").read_text())["categories"]["criminal_law_train"] == {"c": 1}
