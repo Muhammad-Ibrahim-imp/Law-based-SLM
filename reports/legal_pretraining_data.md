@@ -84,26 +84,43 @@ Removed: 430 family and 2,442 criminal documents, almost all for CaseHOLD. **Cas
 
 The shards were built before a cleaning fix (21 Oct). Hyphenated compounds split across PDF line breaks were merged without their hyphen ("well-\nreasoned" → "wellreasoned"). `data/cleaner.py` now keeps the hyphen unless the merged word also appears elsewhere in the document. The current shards still have the merged forms, which affects only case law with PDF line wraps. Rebuilding (extract stage onward) would pick up the fix.
 
-## Uploading to Modal (not done: the team still has to pick the account)
+## Getting the data onto Modal
 
-The data volume `law-slm-data` is mounted at `/vol/data`, so the dataset root is `/dataset` inside the volume. Its `manifest.json` already lists other categories. **Don't upload the local `manifest.json` as is.** Merge only the four legal categories:
+The four categories, a filtered `manifest.json` and a dataset card are in our **private** Hugging Face dataset repo **`Law-based-slms/legal-pre-training-data`**. The upload was verified file by file against the shard SHA-256s. `scripts/modal_fetch_data.py` copies the data from there onto the training account's volume `law-slm-data` (mounted at `/vol/data`, dataset root `/vol/data/dataset`, the same as `modal_training.py`).
+
+**Until `a/data-prepare` is merged into `main`, check out that branch first.** The scripts only exist there:
 
 ```bash
-mkdir remote_manifest
-modal volume get law-slm-data /dataset/manifest.json remote_manifest/manifest.json
-python -m scripts.merge_manifest_section --from dataset/manifest.json --into-root remote_manifest --section family_law_train --section family_law_validation --section criminal_law_train --section criminal_law_validation
-modal volume put law-slm-data dataset/family_law_train /dataset/family_law_train
-modal volume put law-slm-data dataset/family_law_validation /dataset/family_law_validation
-modal volume put law-slm-data dataset/criminal_law_train /dataset/criminal_law_train
-modal volume put law-slm-data dataset/criminal_law_validation /dataset/criminal_law_validation
-modal volume put --force law-slm-data remote_manifest/manifest.json /dataset/manifest.json
+git fetch origin
+git checkout a/data-prepare
 ```
 
-1. Activate the Modal profile that will run legal pretraining first (`modal profile activate <profile>`).
-2. The merge refuses if the tokenizer fingerprints differ. It replaces only the named categories and prints the category lists before and after.
-3. Upload the shards (~11 GB) **before** the merged manifest, so the manifest never points at missing files.
-4. Don't upload `remote_manifest/manifest.json.lock`, which the merge script creates.
-5. If the remote volume has no `manifest.json`, skip the `get` and merge steps and upload `dataset/manifest.json` directly.
+One-time setup on the training account: create a Modal Secret named `huggingface` that holds a Hugging Face token with read access to the repo. A read token is enough; ask Member A to add you to the `Law-based-slms` organisation if you can't see the repo.
+
+```bash
+modal profile activate <training-account-profile>
+modal secret create huggingface HF_TOKEN=hf_your_read_token
+```
+
+Then fetch all four categories (detached, so closing your terminal doesn't stop it):
+
+```bash
+modal run --detach scripts/modal_fetch_data.py
+```
+
+What it does:
+1. Downloads only the requested categories plus `manifest.json` into `/vol/data/_incoming/`.
+2. Checks every shard's size and SHA-256 against the manifest.
+3. Refuses if a category already exists on the volume.
+4. Moves the folders into `/vol/data/dataset/`.
+5. Merges the four entries into the existing `manifest.json`. Other categories (`general_train`, `sft`, …) are left untouched, and it refuses on a tokenizer mismatch.
+6. Runs `validate_shards` on each category.
+7. Commits the volume and deletes `_incoming`.
+
+Options:
+- Only some categories: `--categories family_law_train,family_law_validation`.
+- Replace categories that are already there: `--overwrite`.
+- Progress and errors are in the Modal dashboard under the app `law-slm-fetch-data`. It downloads ~11 GB and takes about 15–30 minutes.
 
 ## Rebuilding
 

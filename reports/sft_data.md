@@ -211,24 +211,38 @@ python -m scripts.prepare_sft_data --root dataset --source smol_smoltalk --split
 - Add `--validate` to any command to check a split.
 - About 0.97 GB on disk (0.33B tokens × 3 bytes, plus spans).
 
-## Uploading to Modal (not done yet: the team still has to pick the SFT account)
+## Building the SFT data on Modal
 
-The data volume `law-slm-data` is mounted at `/vol/data`, so the dataset root there is `/vol/data/dataset`, which is `/dataset` inside the volume. Its `manifest.json` already lists the general pretraining categories. **Do not upload the local `manifest.json` as is:** it would replace the remote one. Merge only the `sft` section instead.
+The SFT data is **not uploaded anywhere**. Like the general data, it's rebuilt on the account that trains, and checked against my reference build. `scripts/modal_build_sft.py` builds all 8 splits into `/vol/data/dataset/sft/` on the volume `law-slm-data`, and adds `categories.sft` to the existing `manifest.json` there. The update is atomic and locked, and refuses another tokenizer.
 
-On the Modal profile that will run SFT (`modal profile activate <profile>` first):
+**Until `a/data-prepare` is merged into `main`, check out that branch first.** The script and the reference file only exist there:
 
 ```bash
-mkdir remote_manifest
-modal volume get law-slm-data /dataset/manifest.json remote_manifest/manifest.json
-python -m scripts.merge_manifest_section --from dataset/manifest.json --into-root remote_manifest
-modal volume put law-slm-data dataset/sft /dataset/sft
-modal volume put --force law-slm-data remote_manifest/manifest.json /dataset/manifest.json
+git fetch origin
+git checkout a/data-prepare
+modal profile activate <sft-account-profile>
+modal run --detach scripts/modal_build_sft.py
 ```
 
-1. `modal volume get` downloads the remote manifest.
-2. `merge_manifest_section` replaces only `categories.sft`. It refuses if the two manifests have different `tokenizer_fingerprint` values, and prints the category lists before and after.
-3. The first `modal volume put` uploads the shards (~0.97 GB). Do this **before** the merged manifest, so the manifest never points at missing files.
-4. The last command replaces the remote manifest. `--force` is needed because the file already exists.
+**How it reproduces the reference build:**
+- Every upstream dataset is read at a pinned commit (`data/sft_sources.REVISIONS`):
+  - smol-smoltalk `f73fe857…`;
+  - CaseHOLD parquet conversion `8a4dbd58…`;
+  - LawInstruct `578e1007…`.
+- Every split uses the exact config recorded in `reports/sft_expected.json` (same seed, sequence length, LawInstruct subsets and caps, and smol_smoltalk `max_tokens` 248,366,163).
+- The image pins the same `transformers==5.17.0` / `datasets==5.0.1` as `modal_training.py`.
 
-- If the remote volume is empty (no `manifest.json`), skip the `get` and merge steps and upload `dataset/manifest.json` directly.
-- Don't upload `remote_manifest/manifest.json.lock`, which the merge script creates.
+**Practicalities:**
+- **Runtime:** CPU only (4 CPUs, 16 GB); about **1–2 hours**, mostly smol-smoltalk. It downloads ~1 GB of upstream data.
+- **Resumable:** rerun the same command and it skips completed splits and resumes an interrupted one. The volume is committed after each split.
+- **Hugging Face token:** optional (all sources are public). If the account has the `huggingface` Modal Secret (see `reports/legal_pretraining_data.md`), it's used to avoid rate limits.
+
+**What "matches the reference build" means:**
+- At the end the function runs `validate_sft_split` on every split.
+- It compares the result with `reports/sft_expected.json`: config, examples kept, kept and trained tokens, rows, and **the SHA-256 of every shard file** (tokens, mask, spans).
+- If everything is identical, the log (Modal dashboard, app `law-slm-build-sft`) ends with **`SFT build matches the reference build`**. The data is then byte-for-byte what was built and checked locally.
+
+**If it doesn't match:**
+- The log prints `SFT build DIFFERS from the reference build` and one line per difference, and nothing is deleted.
+- Send those lines to Member A, and don't train on the data until it's resolved.
+- The usual causes are a different library version in the image or an upstream file that changed despite the pin.
