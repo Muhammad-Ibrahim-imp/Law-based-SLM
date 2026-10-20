@@ -1,0 +1,301 @@
+{
+ "tokenizer_fingerprint": "450fd25da1a689ff",
+ "splits": {
+  "casehold/train": {
+   "config": {
+    "source_name": "casehold",
+    "hf_dataset": "casehold/casehold",
+    "split": "train",
+    "seed": 1234,
+    "sequence_length": 8192,
+    "shard_tokens": 268435456,
+    "max_tokens": null,
+    "max_open_rows": 64,
+    "vocab_size": 49152,
+    "loader_options": null
+   },
+   "examples_kept": 42002,
+   "kept_tokens": 17375498,
+   "trained_tokens": 1419816,
+   "rows": 2141,
+   "total_tokens": 17539072,
+   "shards": [
+    {
+     "files": {
+      "tokens": "shard_00000.bin",
+      "mask": "shard_00000.mask.bin",
+      "spans": "shard_00000.spans.npy"
+     },
+     "num_tokens": 17539072,
+     "sha256": {
+      "tokens": "1d5ae0daeb2cad8111e250119dba522325668d6b96a7fc0ea838b8671fe3817a",
+      "mask": "80cb122524cd1c1ce4623fe68b449234e9566228eb0ec45c035a1f588101a450",
+      "spans": "43915c7d220450b346c934bcc3239912bc52969f6142c8254e6ffe15bcdc1383"
+     }
+    }
+   ]
+  },
+  "casehold/test": {
+   "config": {
+    "source_name": "casehold",
+    "hf_dataset": "casehold/casehold",
+    "split": "test",
+    "seed": 1234,
+    "sequence_length": 8192,
+    "shard_tokens": 268435456,
+    "max_tokens": null,
+    "max_open_rows": 64,
+    "vocab_size": 49152,
+    "loader_options": null
+   },
+   "examples_kept": 5250,
+   "kept_tokens": 2152603,
+   "trained_tokens": 175890,
+   "rows": 266,
+   "total_tokens": 2179072,
+   "shards": [
+    {
+     "files": {
+      "tokens": "shard_00000.bin",
+      "mask": "shard_00000.mask.bin",
+      "spans": "shard_00000.spans.npy"
+     },
+     "num_tokens": 2179072,
+     "sha256": {
+      "tokens": "fce21d37f743b89feebdb26619a388652d12a45b89dbdb6cce1054dd06927053",
+      "mask": "a848f80ccb8acd904f931e55bfb049968afabfa9e9ee510959c155c36faa1336",
+      "spans": "ad04bb5d593ee52caef21fb94ca2c222dc370fa340232949a0bcaee8eefd0e6f"
+     }
+    }
+   ]
+  },
+  "lawinstruct/train": {
+   "config": {
+    "source_name": "lawinstruct",
+    "hf_dataset": "lawinstruct/lawinstruct",
+    "split": "train",
+    "seed": 1234,
+    "sequence_length": 8192,
+    "shard_tokens": 268435456,
+    "max_tokens": null,
+    "max_open_rows": 64,
+    "vocab_size": 49152,
+    "loader_options": {
+     "subsets": [
+      "RedditLegalQA-reddit_legal_qa",
+      "StackExchangeQuestionsLegal-stack_exchange_questions_legal",
+      "MCExamsLaw-mc_exams_law_explain",
+      "CaseBriefs-case_briefs",
+      "OLCMemos-olc_memos",
+      "MultiLexSum-long_to_short"
+     ],
+     "max_per_subset": 50000
+    }
+   },
+   "examples_kept": 65500,
+   "kept_tokens": 34258339,
+   "trained_tokens": 10837971,
+   "rows": 4194,
+   "total_tokens": 34357248,
+   "shards": [
+    {
+     "files": {
+      "tokens": "shard_00000.bin",
+      "mask": "shard_00000.mask.bin",
+      "spans": "shard_00000.spans.npy"
+     },
+     "num_tokens": 34357248,
+     "sha256": {
+      "tokens": "dcb867a063560ddc15452a66274828223d99ed071c394354d578fe6367ab23e2",
+      "mask": "b9464adede6f90d3eaafce2081d6ba35c1c6a3528ee26324e9102a16b73857cf",
+      "spans": "a9bf494080e570a145e266c22f01f906d7e22e1e6b3dcbc88c45a30a36417782"
+     }
+    }
+   ]
+  },
+  "lawinstruct/test": {
+   "config": {
+    "source_name": "lawinstruct",
+    "hf_dataset": "lawinstruct/lawinstruct",
+    "split": "test",
+    "seed": 1234,
+    "sequence_length": 8192,
+    "shard_tokens": 268435456,
+    "max_tokens": null,
+    "max_open_rows": 64,
+    "vocab_size": 49152,
+    "loader_options": {
+     "subsets": [
+      "RedditLegalQA-reddit_legal_qa",
+      "StackExchangeQuestionsLegal-stack_exchange_questions_legal",
+      "MCExamsLaw-mc_exams_law_explain",
+      "CaseBriefs-case_briefs",
+      "OLCMemos-olc_memos",
+      "MultiLexSum-long_to_short"
+     ],
+     "max_per_subset": 50000
+    }
+   },
+   "examples_kept": 1957,
+   "kept_tokens": 905328,
+   "trained_tokens": 206763,
+   "rows": 111,
+   "total_tokens": 909312,
+   "shards": [
+    {
+     "files": {
+      "tokens": "shard_00000.bin",
+      "mask": "shard_00000.mask.bin",
+      "spans": "shard_00000.spans.npy"
+     },
+     "num_tokens": 909312,
+     "sha256": {
+      "tokens": "d238917fd1c0e779a9d23c188d26e964e87209409c640efbb09013a979e69b44",
+      "mask": "bec1f70482696551d3d72e05198326d6998909fcf5611e392c0df9df4c113936",
+      "spans": "cbded5eb1d7e51ac672eef4d31bd8188bb1ae4ee2b7a972e32a2b5abf92bc864"
+     }
+    }
+   ]
+  },
+  "reddit_domain/train": {
+   "config": {
+    "source_name": "reddit_domain",
+    "hf_dataset": "lawinstruct/lawinstruct",
+    "split": "train",
+    "seed": 1234,
+    "sequence_length": 8192,
+    "shard_tokens": 268435456,
+    "max_tokens": null,
+    "max_open_rows": 64,
+    "vocab_size": 49152,
+    "loader_options": {
+     "max_per_subset": 50000
+    }
+   },
+   "examples_kept": 30102,
+   "kept_tokens": 14032294,
+   "trained_tokens": 2459117,
+   "rows": 1719,
+   "total_tokens": 14082048,
+   "shards": [
+    {
+     "files": {
+      "tokens": "shard_00000.bin",
+      "mask": "shard_00000.mask.bin",
+      "spans": "shard_00000.spans.npy"
+     },
+     "num_tokens": 14082048,
+     "sha256": {
+      "tokens": "e5c64a32633311cb7c73bdebed0c6173b63d70b8be30bdbea79d4afc43bfa387",
+      "mask": "94555993d0bf3795a1b92ee9818223e930c577b13c2456358f002f7291729c65",
+      "spans": "d016919f41b3d8e1cfadcc6a495d03f8a6a2b6830fec63aa9879e834d7c547b7"
+     }
+    }
+   ]
+  },
+  "reddit_domain/test": {
+   "config": {
+    "source_name": "reddit_domain",
+    "hf_dataset": "lawinstruct/lawinstruct",
+    "split": "test",
+    "seed": 1234,
+    "sequence_length": 8192,
+    "shard_tokens": 268435456,
+    "max_tokens": null,
+    "max_open_rows": 64,
+    "vocab_size": 49152,
+    "loader_options": {
+     "max_per_subset": 50000
+    }
+   },
+   "examples_kept": 419,
+   "kept_tokens": 204942,
+   "trained_tokens": 34193,
+   "rows": 26,
+   "total_tokens": 212992,
+   "shards": [
+    {
+     "files": {
+      "tokens": "shard_00000.bin",
+      "mask": "shard_00000.mask.bin",
+      "spans": "shard_00000.spans.npy"
+     },
+     "num_tokens": 212992,
+     "sha256": {
+      "tokens": "3f68f9c32791906bebd5b3f7123c4eec13f77879a4e0e854f563850d3b0d5f51",
+      "mask": "9e32f03ad52973b2f8cd4505ee2a60436cb08c86eaf8d9d40d01a3e47e0c4f52",
+      "spans": "969f54983f13627b4549ade713db06d7c8ffa9f1d4ac09f52fc0538617859d78"
+     }
+    }
+   ]
+  },
+  "smol_smoltalk/train": {
+   "config": {
+    "source_name": "smol_smoltalk",
+    "hf_dataset": "HuggingFaceTB/smol-smoltalk",
+    "split": "train",
+    "seed": 1234,
+    "sequence_length": 8192,
+    "shard_tokens": 268435456,
+    "max_tokens": 248366163,
+    "max_open_rows": 64,
+    "vocab_size": 49152,
+    "loader_options": null
+   },
+   "examples_kept": 302729,
+   "kept_tokens": 248366379,
+   "trained_tokens": 197356878,
+   "rows": 30395,
+   "total_tokens": 248995840,
+   "shards": [
+    {
+     "files": {
+      "tokens": "shard_00000.bin",
+      "mask": "shard_00000.mask.bin",
+      "spans": "shard_00000.spans.npy"
+     },
+     "num_tokens": 248995840,
+     "sha256": {
+      "tokens": "98201047950a74fd9bb9caa1c05005bb86a0f472c51d7f208dab17f385b41ff1",
+      "mask": "056fdf448eb8cabebfbef7421cefb20c3c052d97e7651916e7c450efa7d71d19",
+      "spans": "98c2e1fb1233269d95cda1df58bbc40161c060485438ecf288919045b9a06357"
+     }
+    }
+   ]
+  },
+  "smol_smoltalk/test": {
+   "config": {
+    "source_name": "smol_smoltalk",
+    "hf_dataset": "HuggingFaceTB/smol-smoltalk",
+    "split": "test",
+    "seed": 1234,
+    "sequence_length": 8192,
+    "shard_tokens": 268435456,
+    "max_tokens": null,
+    "max_open_rows": 64,
+    "vocab_size": 49152,
+    "loader_options": null
+   },
+   "examples_kept": 24064,
+   "kept_tokens": 19645338,
+   "trained_tokens": 15615980,
+   "rows": 2404,
+   "total_tokens": 19693568,
+   "shards": [
+    {
+     "files": {
+      "tokens": "shard_00000.bin",
+      "mask": "shard_00000.mask.bin",
+      "spans": "shard_00000.spans.npy"
+     },
+     "num_tokens": 19693568,
+     "sha256": {
+      "tokens": "9149eff9aab7e098c36911f337abc2ea669be56664bfa9839b91376608c0c3fd",
+      "mask": "738c02a19c57ecf0526bdd90e6453d0c3c35458a96b4557c0ceadf848e57db62",
+      "spans": "7ea77e62555c0200e059ab4fc2e1066c11ad8cec2d0bcf824c5d6abdf112ae49"
+     }
+    }
+   ]
+  }
+ }
+}
