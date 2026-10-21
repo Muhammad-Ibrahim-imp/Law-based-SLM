@@ -71,9 +71,9 @@ The final architecture will **not be assumed in advance**. It will be selected a
 
 ---
 
-# 3. Total 14.7B-Token Data Budget
+# 3. Total 14.8B-Token Data Budget
 
-The project uses a **14.7B-token total training-data budget** covering pre-training and SFT.
+The project uses a **14.8B-token total training-data budget** covering pre-training and SFT.
 
 The proposed allocation is:
 
@@ -82,16 +82,16 @@ The proposed allocation is:
 | General pre-training data | 5.0B | ~34% | General language and knowledge |
 | Legal data — Family Law (SLM 1) | 4.7B | ~32% | Legal-domain specialization |
 | Legal data — Criminal Law (SLM 2) | 4.7B | ~32% | Legal-domain specialization |
-| Conversational SFT data | 0.3B | ~2% | Supervised fine-tuning |
-| **Total** | **14.7B** | **100%** | |
+| SFT data (conversational + legal) | 0.4B | ~3% | Supervised fine-tuning |
+| **Total** | **14.8B** | **100%** | |
 
 Therefore:
 
 ```text
-Total training-data budget = 14.7B tokens
+Total training-data budget = 14.8B tokens
 
 Pre-training = 14.4B tokens
-SFT          = 0.3B tokens
+SFT          = 0.4B tokens
 ```
 
 ## Legal Data Specialization
@@ -110,7 +110,7 @@ The **9.4B legal-token portion (4.7B per SLM) will be specialized for the two SL
 
 Each SLM is trained on a **4.7B-token legal corpus** specific to its own domain.
 
-The 300M conversational SFT tokens are part of the overall 14.7B budget and are used during the post-pre-training SFT stage.
+The ~0.4B SFT tokens (conversational and legal) are part of the overall 14.8B budget and are used during the post-pre-training SFT stage.
 
 ---
 
@@ -148,7 +148,7 @@ General Data               Legal Data
                  │
                  ▼
        Supervised Fine-Tuning
-           300M tokens
+          ~0.4B tokens
                  │
                  ▼
         Post-training / Evaluation
@@ -372,18 +372,18 @@ Only one component of the system should perform this causal shift.
 
 # 11. SFT
 
-The project includes **300M conversational tokens** for supervised fine-tuning.
+The project includes **~0.4B tokens** for supervised fine-tuning: conversational data plus legal instruction data, with the legal sources seen twice (details in `reports/sft_data.md`).
 
 SFT will be performed after the pre-training stage.
 
-The SFT data is included within the overall 14.7B-token budget:
+The SFT data is included within the overall 14.8B-token budget:
 
 ```text
 14.4B Pre-training
 +
-0.3B SFT
+0.4B SFT
 =
-14.7B Total
+14.8B Total
 ```
 
 The SFT stage will focus on improving the models' ability to produce useful conversational responses from legal queries.
