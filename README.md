@@ -636,6 +636,8 @@ Contains autoregressive generation functionality, including:
 - Top-p
 - KV cache
 
+Gemma 3 and LFM2.5 chat through that cache. The prompt is scored once. Each new token updates the stored keys and values, and LFM2.5 also keeps the last two inputs of each short convolution. On CUDA the loaded model is BF16. The first launch of a training checkpoint writes a weights-only `.weights.pt` file beside it.
+
 ### `evaluation/`
 
 Contains:
@@ -920,13 +922,13 @@ Completed:
 - Deterministic general-corpus split and the 12-run H200 sweep
 - Held-out loss for all 12 runs
 - HellaSwag, ARC-Easy, and PIQA for the 25M and 50M models
+- Text continuation from a checkpoint: `python scripts/chat.py`
+- Inference cache for Gemma 3 and LFM2.5, so each new token does not rerun the whole conversation
 
 Next major stages:
 
 ```text
 100M and 200M multiple-choice benchmarks
-      ↓
-Generation loop, then a local chat check
       ↓
 ~200M Family-Law SLM
 ~200M Criminal-Law SLM
