@@ -15,7 +15,9 @@ flash-attention-only path the GQA model uses, so local layers use ordinary
 SDPA. Global layers still force flash attention on CUDA.
 The 270M depth pattern is kept (18 layers = three repeats of 5 local + 1
 global). Hidden size and FFN width are scaled so vocab 49,152 is near 200M.
-`head_dim` is not `d_model / n_heads`. Weights are float32. No KV cache.
+`head_dim` is not `d_model / n_heads`. Weights are float32.
+Passing a cache makes generation reuse keys and values. Training calls
+``forward`` without one, and that path is unchanged.
 This file imports neither `model/` nor any other architecture.
 """
 
@@ -26,6 +28,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.attention import SDPBackend, sdpa_kernel
+
+from common.kv_cache import AttentionSlot
 
 
 def gemma3_layer_types(n_layers: int, local_per_global: int = 5) -> tuple[str, ...]:
@@ -192,7 +196,12 @@ class Attention(nn.Module):
         theta = config.rope_theta_local if sliding else config.rope_theta_global
         self.rope = RoPE(self.head_dim, config.max_seq_len, theta)
 
-    def forward(self, x: torch.Tensor, position_offset: int) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        position_offset: int,
+        slot: AttentionSlot | None = None,
+    ) -> torch.Tensor:
         batch, seq_len, _ = x.shape
         q = self.q_proj(x).view(batch, seq_len, self.n_heads, self.head_dim)
         k = self.k_proj(x).view(batch, seq_len, self.n_kv_heads, self.head_dim)
@@ -201,13 +210,27 @@ class Attention(nn.Module):
         k = self.k_norm(k)
         q = self.rope(q, position_offset)
         k = self.rope(k, position_offset)
-        out = _attend(
-            q.transpose(1, 2),
-            k.transpose(1, 2),
-            v.transpose(1, 2),
-            self.sliding_window,
-            self.scale,
-        )
+        q = q.transpose(1, 2)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
+        if slot is None or slot.length == 0:
+            out = _attend(q, k, v, self.sliding_window, self.scale)
+            if slot is not None:
+                slot.append(k, v)
+        elif seq_len == 1:
+            cached_k, cached_v = slot.append(k, v)
+            out = F.scaled_dot_product_attention(
+                q,
+                cached_k,
+                cached_v,
+                attn_mask=None,
+                dropout_p=0.0,
+                is_causal=False,
+                enable_gqa=True,
+                scale=self.scale,
+            )
+        else:
+            raise ValueError("cached decode accepts one new token at a time")
         out = out.transpose(1, 2).contiguous().view(batch, seq_len, -1)
         return self.o_proj(out)
 
@@ -235,9 +258,14 @@ class Block(nn.Module):
         self.feed_forward = GeGLU(config)
         self.post_feedforward_layernorm = RMSNorm(config.d_model, config.rms_eps)
 
-    def forward(self, x: torch.Tensor, position_offset: int) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        position_offset: int,
+        slot: AttentionSlot | None = None,
+    ) -> torch.Tensor:
         attn = self.post_attention_layernorm(
-            self.attention(self.input_layernorm(x), position_offset)
+            self.attention(self.input_layernorm(x), position_offset, slot)
         )
         x = x + attn
         mlp = self.post_feedforward_layernorm(self.feed_forward(self.pre_feedforward_layernorm(x)))
@@ -263,6 +291,22 @@ class TiedHead(nn.Module):
         return F.linear(hidden, self.embedding.weight)
 
 
+class GemmaCache:
+    """One preallocated attention slot per Gemma layer."""
+
+    def __init__(self, config: Gemma3Config):
+        self.seen = 0
+        self.slots = [
+            AttentionSlot(
+                config.max_seq_len,
+                config.n_kv_heads,
+                config.head_dim,
+                config.sliding_window if kind == "sliding_attention" else None,
+            )
+            for kind in config.layer_types
+        ]
+
+
 class DecoderLM(nn.Module):
     def __init__(self, config: Gemma3Config):
         super().__init__()
@@ -275,16 +319,28 @@ class DecoderLM(nn.Module):
         self.lm_head = TiedHead(self.embedding)
         _initialize(self, config.n_layers)
 
+    def build_cache(self, batch_size: int) -> GemmaCache:
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        return GemmaCache(self.config)
+
     def forward(
-        self, input_ids: torch.Tensor, position_offset: int = 0
+        self,
+        input_ids: torch.Tensor,
+        position_offset: int = 0,
+        cache: GemmaCache | None = None,
     ) -> torch.Tensor:
         if input_ids.ndim != 2:
             raise ValueError("input_ids must have shape [batch, sequence]")
-        if position_offset + input_ids.shape[1] > self.config.max_seq_len:
+        offset = position_offset if cache is None else cache.seen
+        if offset + input_ids.shape[1] > self.config.max_seq_len:
             raise ValueError("input sequence exceeds max_seq_len")
         x = self.embedding(input_ids)
-        for layer in self.layers:
-            x = layer(x, position_offset=position_offset)
+        slots = (None,) * len(self.layers) if cache is None else cache.slots
+        for layer, slot in zip(self.layers, slots):
+            x = layer(x, offset, slot)
+        if cache is not None:
+            cache.seen += input_ids.shape[1]
         return self.lm_head(self.final_norm(x))
 
     @property
