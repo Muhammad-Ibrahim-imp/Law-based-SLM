@@ -86,7 +86,7 @@ No folder exists for these, and none of them is in the team split.
 | Security and jailbreak resistance | Filters, abuse tests, and defenses against prompts that try to bypass the model's limits |
 | Accounts and distribution | Logins, user data, and shipping an app to users |
 
-Generation, JEV, legal data, the 100M and 200M benchmarks, and SFT are still member work. They are listed under "What is next" and in README section 21. A chat window is not the same thing as Member B's generation code. The 200M general pre-training of Gemma 3 and LFM2.5 is finished and is recorded below.
+JEV, legal data, the 100M and 200M benchmarks, and SFT are still member work. They are listed under "What is next" and in README section 21. Member B's generation code is now `generation/` and `scripts/chat.py`. It continues a prompt as more text. A product chat window is still not built, and the model will not reliably answer questions until SFT. The 200M general pre-training of Gemma 3 and LFM2.5 is finished and is recorded below.
 
 ## Result
 
@@ -275,8 +275,7 @@ Each finished directory contains `summary.json`, `metrics.jsonl`, and `checkpoin
 ## What is next
 
 1. Run HellaSwag, ARC-Easy, and PIQA on the 100M checkpoints and on the two finished 200M checkpoints. The 25M and 50M scores are already stored. The 100M and 200M scores are not.
-2. Add a generation loop. The models return logits only. There is no `generate()` implementation and no chat command. See below.
-3. Collect the family-law and criminal-law corpora, then pre-train Gemma 3, without the copy path, on that text. The general 5.0 billion token stage is done for Gemma 3 and LFM2.5. SFT and JEV have not started.
+2. Collect the family-law and criminal-law corpora, then pre-train Gemma 3, without the copy path, on that text. The general 5.0 billion token stage is done for Gemma 3 and LFM2.5. SFT and JEV have not started. The text-continuation command is already in `scripts/chat.py`; SFT is what would make those continuations answer questions.
 
 ## Read the repository in this order
 
@@ -296,6 +295,7 @@ Start with the plan, then the data, then one model, then the training loop, then
 | File | Purpose |
 |---|---|
 | `common/interfaces.py` | Agreed shapes for tokens, batches, model outputs, checkpoints, and evaluation |
+| `common/kv_cache.py` | Fixed-size key-value storage for one attention layer, and the short state kept by an LFM convolution |
 
 ### 3. Data and tokenizer — Member A
 
@@ -393,51 +393,65 @@ Start with the plan, then the data, then one model, then the training loop, then
 | `scripts/train_sweep.py` | Starts one run, or a whole size, on the current machine |
 | `scripts/modal_training.py` | Starts the runs on Modal. Several names can run at once, one H200 each, and a disconnect does not cancel them |
 
-### 10. Tests
+### 10. Text continuation — Member B
+
+The model files still return logits only. This folder calls that forward pass once per new token.
+
+| File | Purpose |
+|---|---|
+| `generation/sampling.py` | Greedy argmax when temperature is 0. Otherwise temperature, top-k, and top-p, then one sample |
+| `generation/generate.py` | Runs the prompt once, stores the cache, then scores one new token at a time. Models without `build_cache` still recompute the whole prefix |
+| `generation/load.py` | Builds the model from its JSON config, loads `checkpoint.pt`, strips a `_orig_mod.` prefix left by `torch.compile`, and writes a weights-only file for the next launch. A CUDA load is stored in BF16 |
+| `scripts/chat.py` | Command that keeps one running document and prints each continuation |
+| `tests/test_generation.py` | Checks sampling, EOS, the context limit, the compile prefix, and that cached Gemma and LFM logits match a full forward |
+
+Gemma 3 stores every layer's keys and values in a buffer of length 8,192. Its 15 local layers attend only to the last 512 of those keys. Its 3 global layers attend to the whole buffer. LFM2.5 does the same for its attention layers and, for each convolution, keeps the last 2 inputs of the kernel-3 filter. The first prompt pass uses the same attention math as training. Each later token is one forward of that token only. `is_causal` is off for that token because the single query is already at the end of the cache.
+
+### 11. Tests
 
 `tests/` checks the pieces above. `tests/test_copy_mechanism.py` checks the copy mixture. `tests/test_experiment_configs.py` checks the twelve original configs. The other test files match the module they name. Add a test when you change your own code. Do not rewrite the suite.
 
-These folders are named in the plan and do not exist yet. They are still member work: `generation/` for Member B, and `post_training/` for Member C.
+`post_training/` is named in the plan and does not exist yet. It is still Member C's work. `generation/` now exists and is described above.
 
 ## How to continue text from a trained checkpoint
 
-These checkpoints are next-token models, not chat models. A prompt is completed as more text. It will not reliably answer in a question-and-answer style until SFT.
+These checkpoints are next-token models. A prompt is completed as more text. The command below does that. It will not reliably answer in a question-and-answer style until SFT. A prompt that already looks like a sentence from the training mix works better than a bare question. For example, `The capital of France is` gives the model a sentence to finish. `What is the capital of France?` may not.
 
-Download the Gemma 3 100M checkpoint:
+Download the finished Gemma 3 200M checkpoint. The file is about 2.4 GB because it includes optimizer state. The first launch writes `gemma3_200m_checkpoint.weights.pt` beside it and later launches load that smaller file. Use a GPU when one is available: the loader stores a CUDA model in BF16, and each new token consults the cache instead of running the whole conversation again.
 
 ```powershell
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
 $modal = "$env:APPDATA\Python\Python314\Scripts\modal.exe"
-& $modal volume get --profile shozab-siraiki law-slm-training /training_sweep/gemma3_100m/checkpoint.pt gemma3_100m_checkpoint.pt
+& $modal volume get --profile mibrahimsh2006 law-slm-training /training_sweep/gemma3_200m/checkpoint.pt gemma3_200m_checkpoint.pt
 ```
 
-The file includes optimizer state, so it is much larger than the model weights. From the repository root, with the project dependencies installed:
+From the repository root, with the project dependencies installed:
 
-```python
-import torch
-from experiments.config import load_experiment_config
-from experiments.models import build_experiment_model
-from tokenizer import load_smollm2_tokenizer
-
-config = load_experiment_config("configs/training/100m/gemma3_100m.json")
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = build_experiment_model(config).to(device).eval()
-checkpoint = torch.load("gemma3_100m_checkpoint.pt", map_location=device, weights_only=False)
-state = checkpoint["model_state_dict"]
-if state and all(key.startswith("_orig_mod.") for key in state):
-    state = {key.removeprefix("_orig_mod."): value for key, value in state.items()}
-model.load_state_dict(state)
-
-tokenizer = load_smollm2_tokenizer()
-ids = tokenizer("The capital of France is", return_tensors="pt").input_ids.to(device)
-with torch.no_grad():
-    for _ in range(40):
-        next_id = torch.argmax(model(ids)[:, -1, :], dim=-1, keepdim=True)
-        ids = torch.cat([ids, next_id], dim=1)
-        if tokenizer.eos_token_id is not None and next_id.item() == tokenizer.eos_token_id:
-            break
-print(tokenizer.decode(ids[0].tolist()))
+```powershell
+python scripts/chat.py --config configs/training/200m/gemma3_200m.json --checkpoint gemma3_200m_checkpoint.pt
 ```
 
-Swap the config path and checkpoint to inspect another run. Greedy argmax is the simplest check that the weights load. It is not a chat product.
+Type a line and press Enter. The program prints only the new text, then waits for the next line. `/reset` starts a new document. `/quit` exits. One prompt and no loop:
+
+```powershell
+python scripts/chat.py --config configs/training/200m/gemma3_200m.json --checkpoint gemma3_200m_checkpoint.pt --prompt "The capital of France is"
+```
+
+The default is greedy decoding, which is `--temperature 0`. `--temperature 0.8 --top-p 0.9` samples instead. `--max-new-tokens` defaults to 128. Generation stops early on the tokenizer EOS token or at the 8,192 token context limit.
+
+The same command runs LFM2.5 after downloading its checkpoint from profile `muslimonly234-glitch`:
+
+```powershell
+& $modal volume get --profile muslimonly234-glitch law-slm-training /training_sweep/lfm25_200m/checkpoint.pt lfm25_200m_checkpoint.pt
+python scripts/chat.py --config configs/training/200m/lfm25_200m.json --checkpoint lfm25_200m_checkpoint.pt
+```
+
+What the code does:
+
+- `generation/load.py` builds the model named in the JSON file and loads `model_state_dict`. If `torch.compile` prefixed every key with `_orig_mod.`, that prefix is removed.
+- `generation/generate.py` reads the logits at the last position and chooses one token. Gemma 3 and LFM2.5 then run `forward` on that token alone, using the cache filled by the prompt. A model without `build_cache` still receives the whole sequence.
+- `generation/sampling.py` uses argmax when the temperature is 0. A positive temperature divides the logits, applies top-k and top-p when those arguments are set, and draws one token.
+- `scripts/chat.py` encodes the first line with the same tokenizer call the data pipeline uses. Later lines are appended without a second beginning-of-text token. EOS is not kept in the running document, so the next line stays in the same text. On CUDA the forward pass uses BF16 autocast, matching training.
 
 The reading order is the section "Read the repository in this order" above.
