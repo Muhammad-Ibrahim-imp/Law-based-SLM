@@ -42,7 +42,7 @@ def evaluate_validation(
                     labels.reshape(-1),
                     reduction="sum",
                 )
-        token_count = labels.numel()
+        token_count = int((labels != -100).sum())
         total_loss += float(loss_sum)
         total_tokens += token_count
         completed_batches += 1

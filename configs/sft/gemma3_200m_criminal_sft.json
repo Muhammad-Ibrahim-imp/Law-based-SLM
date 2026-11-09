@@ -1,0 +1,37 @@
+{
+  "name": "gemma3_200m_criminal_sft",
+  "architecture": "gemma3",
+  "size": "200m",
+  "expected_parameters": 200069440,
+  "model": {
+    "d_model": 832,
+    "n_layers": 18,
+    "n_heads": 4,
+    "n_kv_heads": 1,
+    "head_dim": 256,
+    "d_ff": 2688
+  },
+  "seed": 42,
+  "target_train_tokens": 380952576,
+  "sequence_length": 8192,
+  "micro_batch_size": 2,
+  "gradient_accumulation_steps": 32,
+  "learning_rate": 2e-05,
+  "betas": [
+    0.9,
+    0.95
+  ],
+  "eps": 1e-08,
+  "weight_decay": 0.1,
+  "warmup_ratio": 0.02,
+  "min_lr_ratio": 0.1,
+  "max_grad_norm": 1.0,
+  "log_every_steps": 10,
+  "eval_every_steps": 200,
+  "checkpoint_every_steps": 200,
+  "validation_batches": null,
+  "train_category": "criminal_law_train",
+  "validation_category": "criminal_law_validation",
+  "sft": true,
+  "initialize_from": "/vol/runs/legal_finetuning/gemma3_200m_criminal_legal/checkpoint.pt"
+}

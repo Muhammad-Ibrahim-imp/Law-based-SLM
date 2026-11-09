@@ -40,6 +40,8 @@ image = (
             "**/*.pyc",
             "**/__pycache__/**",
             ".pytest_cache/**",
+            "frontend/**",
+            "scripts/data/**",
         ],
     )
     .env({"PYTHONPATH": REMOTE_ROOT})

@@ -40,7 +40,9 @@ def save_checkpoint(
         "runtime_state": runtime_state or {},
     }
 
-    torch.save(checkpoint, path)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    torch.save(checkpoint, temporary)
+    temporary.replace(path)
 
 def load_checkpoint(path, model, optimizer, scheduler, device):
     path = Path(path)

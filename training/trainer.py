@@ -16,6 +16,7 @@ class Trainer:
                  device: torch.device,
                  max_grad_norm: float = 1.0,
                  gradient_accumulation_steps: int = 1,
+                 normalize_by_tokens: bool = False,
                  ):
         if gradient_accumulation_steps <= 0:
             raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be > 0".format(gradient_accumulation_steps))
@@ -25,10 +26,12 @@ class Trainer:
         self.device = device
         self.max_grad_norm = max_grad_norm
         self.gradient_accumulation_steps = gradient_accumulation_steps
+        self.normalize_by_tokens = normalize_by_tokens
+        self.accumulated_tokens = 0
         self.micro_step = 0
         self.global_step = 0
         self.optimizer.zero_grad(set_to_none=True)
-    def train_step(self, batch, labels=None):
+    def train_step(self, batch, labels=None, finish_accumulation=False):
         # Keep compatibility with the older train_step(input_ids, labels)
         # tests while the shared pipeline uses the documented batch mapping.
         if labels is not None:
@@ -48,7 +51,14 @@ class Trainer:
                 loss = causal_language_model_loss(logits,labels)
 
         logging_loss = loss.detach()
-        loss = loss / self.gradient_accumulation_steps
+        if self.normalize_by_tokens:
+            token_count = int((labels != -100).sum())
+            if token_count == 0:
+                raise ValueError("training batch has no supervised tokens")
+            self.accumulated_tokens += token_count
+            loss = loss * token_count
+        else:
+            loss = loss / self.gradient_accumulation_steps
         loss.backward()
 
         self.micro_step += 1
@@ -57,7 +67,12 @@ class Trainer:
 
         optimizer_step = False
 
-        if self.micro_step % self.gradient_accumulation_steps == 0:
+        if self.micro_step % self.gradient_accumulation_steps == 0 or finish_accumulation:
+            if self.normalize_by_tokens:
+                for parameter in self.model.parameters():
+                    if parameter.grad is not None:
+                        parameter.grad.div_(self.accumulated_tokens)
+                self.accumulated_tokens = 0
             grad_norm = clip_gradients(
                 self.model,
                 self.max_grad_norm,

@@ -638,6 +638,15 @@ Contains autoregressive generation functionality, including:
 
 Gemma 3 and LFM2.5 chat through that cache. The prompt is scored once. Each new token updates the stored keys and values, and LFM2.5 also keeps the last two inputs of each short convolution. On CUDA the loaded model is BF16. The first launch of a training checkpoint writes a weights-only `.weights.pt` file beside it.
 
+For the completed legal SFT models, place the final checkpoints at `checkpoints/family_sft.pt` and `checkpoints/criminal_sft.pt`, then run from the repository root:
+
+```powershell
+python scripts/chat_sft.py family
+python scripts/chat_sft.py criminal
+```
+
+The launcher uses the shared SFT chat format, keeps conversation history, and stops at the assistant end-of-turn token. Type `/reset` to clear history or `/quit` to exit. CUDA is selected when available; use `--device cpu` to run on CPU. Checkpoints are stored separately from Git.
+
 ### `evaluation/`
 
 Contains:

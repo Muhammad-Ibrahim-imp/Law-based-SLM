@@ -45,10 +45,10 @@ LEGAL_CATEGORIES = ("family_law_train", "family_law_validation", "criminal_law_t
 
 image = (
     modal.Image.debian_slim(python_version="3.12")
-    .pip_install("huggingface_hub", "numpy")
+    .pip_install("huggingface_hub", "numpy", "datasets==5.0.1", "transformers==5.17.0")
     .add_local_dir(ROOT, remote_path=REMOTE_ROOT, copy=True,
                    ignore=["dataset/**", "results/**", ".git/**", "**/*.pt", "**/*.bin", "**/*.pyc",
-                           "**/__pycache__/**", ".pytest_cache/**", "frontend/**"])
+                           "**/__pycache__/**", ".pytest_cache/**", "frontend/**", "scripts/data/**"])
     .env({"PYTHONPATH": REMOTE_ROOT})
 )
 app = modal.App("law-slm-fetch-data", image=image)

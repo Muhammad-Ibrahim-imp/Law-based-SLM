@@ -33,8 +33,16 @@ class ExperimentConfig:
     checkpoint_every_steps: int
     validation_batches: int | None
     copy_mechanism: bool = False
+    train_category: str = "general_train"
+    validation_category: str = "general_validation"
+    sft: bool = False
+    initialize_from: str | None = None
 
     def __post_init__(self) -> None:
+        if self.sft and self.copy_mechanism:
+            raise ValueError("SFT uses the Gemma model without the copy mechanism")
+        if not self.train_category or not self.validation_category:
+            raise ValueError("training and validation categories must be nonempty")
         if self.architecture not in {"gqa", "lfm25", "qwen3", "gemma3"}:
             raise ValueError(f"unsupported architecture: {self.architecture!r}")
         if self.size not in {"25m", "50m", "100m", "200m"}:

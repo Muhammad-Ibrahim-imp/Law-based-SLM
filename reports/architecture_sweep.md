@@ -1,8 +1,148 @@
 # Architecture sweep report
 
+## Final legal and SFT results
+
+Both Gemma 3 200M domain models completed legal training at 8,965 optimizer steps (4,700,241,920 tokens each), followed by the full SFT mix at 727 optimizer steps (380,952,576 packed positions each).
+
+| Model | Final legal validation loss | Final SFT validation loss | Status |
+| --- | ---: | ---: | --- |
+| Family Law | 1.6462 | 1.7485 | Complete; final SFT checkpoint saved |
+| Criminal Law | 1.6205 | 1.7411 | Complete; final SFT checkpoint saved |
+
+Both final checkpoints were downloaded and independently verified against remote SHA-256 hashes:
+
+- Family: `a5c10f888bf0224b8933a9f60be9e649e969e1268fd35dc5f42aed9226c0fd75`
+- Criminal: `f2ec347ffbfc2ce92aae7a2ffc0ef2483544d254af39f2b8c29ecf4828360944`
+
+Each full checkpoint is 2,401,155,499 bytes. Checkpoints and datasets are excluded from Git. Local inference uses `scripts/chat_sft.py family` or `scripts/chat_sft.py criminal`, loading `checkpoints/family_sft.pt` and `checkpoints/criminal_sft.pt`. Both models answered short prompts locally on CUDA after adding a standard-attention fallback for PyTorch builds without Flash Attention. This verifies execution, not legal answer quality; downstream benchmarks remain outstanding.
+
+The workspace and progress entries below are historical snapshots, not the current completion state.
+
+## Current Criminal SFT workspace — abdulrehmanriaz29, 23 October 2026
+
+The user requested `abdulrehmanriaz29@gmail.com`; the existing authorized profile/workspace is `abdulrehmanriaz29` (distinct from `abdulrehmanriaz299`). Family SFT is complete at 727/727, validation loss 1.7485. Criminal SFT restored step 600/727 (82.5%) on one H200, leaving 127 steps. Both legal stages are already complete. Only Criminal is scheduled; Family is preserved without retraining. The previous `w44407679` deployment was stopped.
+
+Migration verified 30 SFT files totaling 5,820,110,730 bytes, including Family's final model/summary and Criminal's full resumable state. Existing destination SFT metadata differed, so the initial migration safely refused the manifest conflict. Current data is isolated on `law-slm-sft-data:/dataset`; existing general models and old datasets remain untouched. The original dataset manifest was backed up locally at `results/abdulrehmanriaz29_manifest_before_resume.json`. Preflight confirmed exact reference SFT data and checkpoint steps Family 727 / Criminal 600. The SFT-only launch refuses a missing resume checkpoint.
+
+Criminal call `fc-01M5M9CFY7FT6V51R3ABSWCF13`; migration app `ap-y0gft9PTGqD5mJvYqzqN1D`. New optimizer steps and Criminal completion have not yet been verified. Later workspace sections are historical.
+
+```powershell
+$env:PYTHONUTF8 = "1"
+& "$env:APPDATA\Python\Python313\Scripts\modal.exe" app logs law-slm-legal-finetuning --profile abdulrehmanriaz29 --follow
+```
+
+## Current SFT workspace — shozab-siraiki, 23 October 2026
+
+The user authorized `w44407679@gmail.com`; Modal connected it to workspace `shozab-siraiki`, stored as CLI profile `w44407679`. Both H200 jobs restored their saved SFT states: Family step 400/727 (55.0%), Criminal step 200/727 (27.5%). Both legal stages remain complete at step 8,965 and 4,700,241,920 tokens each; revalidation losses were Family 1.6462 and Criminal 1.6205. The old `eldrago1029` deployment was stopped. Unsaved work after Family 400 and Criminal 200 must be repeated.
+
+Migration verified 66 files totaling 26,932,016,116 bytes, including the two full SFT checkpoints. Existing destination general-data categories were preserved through a metadata-checked manifest merge; the prior manifest is backed up locally at `results/destination_manifest_before_sft.json`. Merge self-checks passed for category preservation and refusal of metadata/category conflicts. Destination preflight preserved general Gemma/LFM models, validated all legal categories, and confirmed exact SFT reference data.
+
+Active app `ap-wru2lUpXh9wFgWIwMtHVwS`; Family call `fc-01M5M6AA5C9DGJ6RSNF8HKMX82`; Criminal call `fc-01M5M6AAEQDW5FR6F0X7BQEWB4`. New post-resume steps and full SFT completion remain unverified. Later workspace sections are historical.
+
+```powershell
+$env:PYTHONUTF8 = "1"
+& "$env:APPDATA\Python\Python313\Scripts\modal.exe" app logs law-slm-legal-finetuning --profile w44407679 --follow
+```
+
+## Current workspace — eldrago1029, 23 October 2026
+
+Training moved from exhausted `ariaz-bscs21seecs` to authorized workspace/profile `eldrago1029`. Both jobs reported NVIDIA H200 and restored full legal states: Family 7,800/8,965 (87.0%), Criminal 7,600/8,965 (84.8%). The old deployment was stopped. Migration verified 60 files totaling 22,129,572,719 bytes, including prepared legal/SFT data, final general Gemma/LFM checkpoints, and resumable legal checkpoints. CPU preflight passed, preserved both general models, and confirmed exact SFT reference data. Source files remain intact.
+
+Active app `ap-08IO6HnYEqaLZnot07zB46`; Family call `fc-01M5KSR9BADQRS4Q8FWERFEQVX`; Criminal call `fc-01M5KSR9DEHBBMFP1RTKKB0BBS`. Post-resume optimizer steps and full completion remain unverified. Each job continues legal training then SFT. Later workspace sections are historical.
+
+```powershell
+$env:PYTHONUTF8 = "1"
+& "$env:APPDATA\Python\Python313\Scripts\modal.exe" app logs law-slm-legal-finetuning --profile eldrago1029 --follow
+```
+
+## Current workspace — ariaz-bscs21seecs, 23 October 2026
+
+At the user's request, training moved from exhausted `muhammad-ibrahim-imp` to `ariaz-bscs21seecs` (CLI profile `ariazseecs`). Both jobs reported NVIDIA H200 and restored full legal states: Family step 6,200/8,965 (69.2%), Criminal step 6,000/8,965 (66.9%). The source deployment was stopped. Prepared legal/SFT data transferred with SHA-256 checks. Two large checkpoint transfers stalled; a checkpoint-only retry verified all 10 model/log files (9,540,996,634 bytes) without recopying the data. Destination preflight preserved final general Gemma/LFM models, validated all legal categories, and confirmed the exact SFT reference build.
+
+Active app `ap-ZG3LE4YtFSMCnzwPeNJXsV`; Family call `fc-01M5JKP80XCCMJ35PJ3890BEMZ`; Criminal call `fc-01M5JKP830YM0BD8T7ZF64T8WJ`. Both jobs started after a brief H200 capacity wait. Post-resume optimizer steps and full completion have not yet been verified; each job continues legal training then SFT. Later workspace sections are historical.
+
+```powershell
+$env:PYTHONUTF8 = "1"
+& "$env:APPDATA\Python\Python313\Scripts\modal.exe" app logs law-slm-legal-finetuning --profile ariazseecs --follow
+```
+
+## Current workspace — muhammad-ibrahim-imp, 22 October 2026
+
+Training moved from exhausted `mibrahimsh2006` to the user-authorized workspace `muhammad-ibrahim-imp` (CLI profile `mibrahimimp`). Both jobs reported NVIDIA H200 and restored legal training: Family step 4,600/8,965 (51.3%), Criminal step 4,400/8,965 (49.1%). The old deployment was stopped. Migration verified 60 files totaling 22,129,336,055 bytes, including legal/SFT data, final general Gemma/LFM models, and full resumable legal states. Destination CPU preflight passed and confirmed the SFT reference build. Source files remain intact.
+
+Active app `ap-K99uu1PXKD2PwfjRidt5Ni`; Family call `fc-01M5J781EYFWG43QK0F7Z0ZJRJ`; Criminal call `fc-01M5J781H6Q0H8HJ12ZNBHAVT0`. New post-resume steps and full completion have not yet been verified. Each job continues legal training and then SFT. Later workspace sections are historical.
+
+```powershell
+$env:PYTHONUTF8 = "1"
+& "$env:APPDATA\Python\Python313\Scripts\modal.exe" app logs law-slm-legal-finetuning --profile mibrahimimp --follow
+```
+
+## Current workspace — mibrahimsh2006, 22 October 2026
+
+At the user's request, training moved from `abdulrehmanwork996` to `mibrahimsh2006` using one H200 per domain. Both destination jobs reported NVIDIA H200 and restored full legal checkpoints: Family step 3,400/8,965 (37.9%), Criminal step 3,200/8,965 (35.7%). The source app was stopped to prevent duplicate training. Migration verified 60 files totaling 22,129,238,645 bytes; existing destination files were required to match rather than overwritten. CPU preflight passed, preserving the general Gemma/LFM checkpoints and verifying legal/SFT references. SFT follows each legal stage; completion remains unverified.
+
+Migration app: `ap-orivMImNYtO9JbnOhBqu2c`. Training calls: Family `fc-01M5HCT2NKSX1N7T7DZY5N3VN6`, Criminal `fc-01M5HCT2QH1W4WFA43DQVGNVE8`. The following is the current PowerShell monitoring command; workspace references in later sections are historical.
+
+```powershell
+$env:PYTHONUTF8 = "1"
+& "$env:APPDATA\Python\Python313\Scripts\modal.exe" app logs law-slm-legal-finetuning --profile mibrahimsh2006 --follow
+```
+
+## H200 resume — 22 October 2026
+
+The funded workspace is now `abdulrehmanwork996`. Both jobs resumed in deployed app `law-slm-legal-finetuning` (`ap-dHdIVhHkl2qD3lzaWHbL2I`), each reporting NVIDIA H200. Family restored legal step 1,800/8,965 (20.1%); Criminal restored step 1,600/8,965 (17.8%). These are verified resume points, not completion results. Each job continues its legal stage and then SFT.
+
+All legal/SFT data passed reference validation in the new workspace. General Gemma/LFM and resumable legal checkpoints were copied with size and SHA-256 checks. A truncated source download stopped the first migration safely; checkpoint-only retry succeeded (10 files, 9,540,661,003 bytes). CPU preflight preserved both final general checkpoints and confirmed the SFT reference build before allocating GPUs. Original workspace files remain intact. Checkpoint migration hashes are stored at `law-slm-training:/migration_sha256.json` in the new workspace.
+
+Training calls: Family `fc-01M5H2Q8WPE9JGFNEB2R7F4XZ8`; Criminal `fc-01M5H2Q952RZTN055J6Z9PZX11`. Detached remote execution continues independently of local Wi-Fi. Current PowerShell monitoring:
+
+```powershell
+$env:PYTHONUTF8 = "1"
+& "$env:APPDATA\Python\Python313\Scripts\modal.exe" app logs law-slm-legal-finetuning --profile abdulrehmanwork996 --follow
+```
+
+The older H100 commands below are historical. Full legal/SFT completion has not yet been verified.
+
 This report covers the fair 12-run comparison of GQA, LFM2.5, Qwen3, and Gemma 3 at 25M, 50M, and 100M parameters, and the later 200M general pre-training of Gemma 3 and LFM2.5. All 12 smaller training runs finished. Both 200M general runs finished. The 100M and 200M multiple-choice benchmarks have not been run.
 
 The selection metric agreed for this sweep is held-out validation loss, with perplexity reported from that loss. On that metric, **Gemma 3 is the architecture to keep.** It led at 50M, 100M, and 200M.
+
+## Legal training preparation — 21 October 2026
+
+The user confirmed two separate Gemma 3 200M models, initialized from the finished general checkpoint: Family Law on one H100 and Criminal Law on another H100, followed by the same SFT mix for both. The selected Modal workspace/profile is `abdulrehmanriaz299`, authorized on 21 October 2026. The similarly named `abdulrehmanriaz29` is a different workspace. Both legal-training jobs started in app `ap-owdbLn54EhLUoghFlyCYTF`, but stopped by 22 October 2026 when the training workspace exceeded its spending limit. Each container was checked with `nvidia-smi -L` and has one NVIDIA H100 80GB HBM3. Verified startup progress: family step 20/8,965 (10,485,760 tokens, training loss 2.7510); criminal step 1/8,965 (524,288 tokens, loss 2.7976). Initial held-out losses were 2.8419306294 (family) and 2.8321 (criminal). These are startup snapshots, not final results. SFT follows each completed legal stage.
+
+- Legal data is ready upstream: see `reports/legal_pretraining_data.md`. Each model trains for 4.7B tokens (8,965 optimizer steps, 4,700,241,920 packed tokens). Family repeats its unique corpus about 4.4 times; criminal uses about one pass.
+- SFT follows `reports/sft_data.md`: smol-smoltalk once and each legal source twice, identical for both models. One complete mix contains 46,503 packed rows, 380,952,576 positions including padding, about 379.7M kept tokens and 226.8M supervised tokens. The final partial accumulation step is included without repeating rows: 727 optimizer steps.
+- Confirmed settings: context 8,192, micro-batch 2, accumulation 32 (524,288 positions per full step), legal peak LR 1e-4, SFT peak LR 2e-5, 2% warmup, cosine decay to 10%, existing AdamW settings, BF16 and compilation. Each new stage loads model weights and starts a fresh optimizer/scheduler; resuming within a stage restores its full checkpoint.
+- Configs: `configs/legal/gemma3_200m_{family,criminal}_legal.json` and `configs/sft/gemma3_200m_{family,criminal}_sft.json`. Launcher: `scripts/modal_legal_training.py`. Separate outputs: `law-slm-training:/legal_finetuning/<config-name>/`.
+- The original architecture source and 200M configs were archived locally at `results/preserved_architectures/2026-10-21/gemma_lfm_source.zip`, with its Git revision in `source_commit.txt`. Training does not change either architecture implementation or the original general checkpoint directories. Before GPU allocation, the launcher requires final step-9,490 summaries, copies both Gemma and LFM checkpoints/logs/summaries into `/preserved/200m_general/`, and verifies SHA-256 copies.
+- **Checkpoint transfer status:** source workspace `mibrahimsh2006` is now authorized, and its Gemma summary confirms step 9,490 and validation loss 2.9243141773371413. Checkpoint, summary and metrics were copied directly between Modal workspaces using `scripts/modal_transfer_checkpoint.py`; all three destination SHA-256 hashes match the originals. The files are on `abdulrehmanriaz299`, volume `law-slm-training`, under `/training_sweep/gemma3_200m/`. Transfer verification is recorded locally in `results/preserved_checkpoints/gemma3_200m_transfer.json`. The attempted local bulk download stalled and is not a local weight backup. LFM source workspace `muslimonly234-glitch` is also authorized. Its final step-9,490 checkpoint, metrics and summary were copied into the selected workspace under `/training_sweep/lfm25_200m/`; all destination SHA-256 hashes match their sources. Verification is recorded in `results/preserved_checkpoints/lfm25_200m_transfer.json`. The transfer ran on destination CPU because the source workspace had exceeded its spend limit. The older step-1,907 Gemma copy belongs to `abdulrehmanriaz29`, not the selected workspace. Before this transfer, no local model-weight files were found in the project model/checkpoint locations.
+- On the older `abdulrehmanriaz29` workspace, CPU SFT preparation completed in app `ap-Zat4Zw96f8xMp6g6T4oKpA` (`law-slm-build-sft`), call `fc-01M5FHYWFC2M2G9A8G0RTP6NR4`. All eight splits were built and validated; the final log confirms `SFT build matches the reference build`. The launcher refuses SFT reference differences. All 18 targeted CPU tests for initialization, exact SFT passes, masked-token weighting, validation, checkpointing, resume, schedules and existing experiment configs pass; H100 startup is verified for both domains; full training and SFT results remain in progress.
+
+### Windows CMD: launch and monitor
+
+Training is currently stopped by the workspace spending limit. These CMD commands show the recorded progress. Resolve the workspace billing limit before resuming. The launcher validated all inputs on CPU before starting two H100 containers. Modal functions have a 24-hour timeout. After the current app has stopped, the same launcher resumes the last committed checkpoints; do not start duplicate jobs against the active output directories.
+
+```cmd
+set "PYTHONUTF8=1"
+set "MODAL=%APPDATA%\Python\Python313\Scripts\modal.exe"
+"%MODAL%" app list --profile abdulrehmanriaz299
+"%MODAL%" app logs ap-owdbLn54EhLUoghFlyCYTF --profile abdulrehmanriaz299 --tail 30
+```
+
+The active app ID is `ap-owdbLn54EhLUoghFlyCYTF`. Logs include the domain/stage name, optimizer step, loss and tokens. Legal progress is step / 8,965; SFT progress is step / 727. Stored `metrics.jsonl` events also include total steps and percentage.
+
+```cmd
+"%MODAL%" app logs ap-owdbLn54EhLUoghFlyCYTF --profile abdulrehmanriaz299 --tail 50
+"%MODAL%" app logs ap-owdbLn54EhLUoghFlyCYTF --profile abdulrehmanriaz299 --follow
+"%MODAL%" volume get --profile abdulrehmanriaz299 law-slm-training /legal_finetuning/gemma3_200m_family_legal/metrics.jsonl family_legal_metrics.jsonl --force
+"%MODAL%" volume get --profile abdulrehmanriaz299 law-slm-training /legal_finetuning/gemma3_200m_criminal_legal/metrics.jsonl criminal_legal_metrics.jsonl --force
+```
+
+Replace `_legal` with `_sft` for the SFT stages. A stage's `summary.json` is written only after it finishes. Volume downloads show the latest committed checkpoint interval (every 200 steps); live app logs show more recent training progress.
+
+
+The `huggingface` secret is verified present on `abdulrehmanriaz299`. All four legal categories were fetched, checksum-validated and committed by app `ap-biJB19g5nsVcrDnTcypSpc`. SFT preparation also completed on this workspace in app `ap-TfiEycMbvj25pF8ocYMNsL`, with the final message `SFT build matches the reference build`. Both checkpoint transfers are verified. CPU preflight passed, confirmed both checkpoint files are at step 9,490, saved checksum-verified copies under `/preserved/200m_general/`, and verified the combined legal/SFT dataset before submitting the two H100 calls. The fetch image now includes the datasets/transformers dependencies imported by the shard validator.
 
 ## Who did which part
 
@@ -148,7 +288,7 @@ It has the best validation loss at 50M, 100M, and 200M. The 200M general run is 
 
 LFM2.5 is the alternative if GPU time becomes the binding constraint. At 200M its loss is 2.9700 against Gemma 3's 2.9243, and it trains at 225,894 tokens/sec against 87,102. Qwen3 and GQA were not trained at 200M. At 100M, Qwen3 matched LFM2.5 on loss and was slower, and GQA was last.
 
-This choice is not a claim about legal answering quality. The 200M run used general web and textbook text only. Legal pre-training, supervised fine-tuning, JEV, and the 200M multiple-choice benchmarks have not started.
+This choice is not a claim about legal answering quality. The 200M run used general web and textbook text only. Legal continued pretraining is now running as recorded above. Supervised fine-tuning follows it; JEV and the 200M multiple-choice benchmarks have not started.
 
 The later copy-mechanism runs do not change this choice. They are recorded below. Gemma 3 is still the best architecture at 100M with the copy path turned on, but its loss is worse than the same model without the copy path. The 200M runs did not use the copy path.
 
@@ -197,7 +337,7 @@ At every size, the copy path raised held-out loss. The 200M runs left it off. Ge
 
 ## 200M general pre-training
 
-Both runs are finished. This is the README general-corpus stage: 5.0 billion tokens, of which 99.5% is train and 0.5% is validation. It is not the full 14.4 billion token pre-training plan. The family-law corpus, the criminal-law corpus, and the 0.3 billion token SFT set have not been collected, so those stages have not started. Qwen3 and GQA were not trained at 200M.
+Both runs are finished. This is the README general-corpus stage: 5.0 billion tokens, of which 99.5% is train and 0.5% is validation. The legal corpora and the revised ~0.4B-token SFT mix have since been prepared; see the legal preparation status above. Legal training is running; SFT has not started yet. Qwen3 and GQA were not trained at 200M.
 
 The copy path is off. The sequence length is 8,192. The global batch stays 524,288 tokens: sequence 8,192, micro-batch 2, accumulation 32. The peak learning rate is 2e-4 for both models. The rest of the schedule matches the smaller sweep: AdamW, betas (0.9, 0.95), epsilon 1e-8, weight decay 0.1 on parameters with more than one dimension, cosine decay to 10% of the peak, 2% warmup, gradient clip 1.0, seed 42, BF16, and `torch.compile`. One H200 ran each model. The two models were not on one workspace for the whole run, because volumes are not shared across Modal accounts and credits ran out between resumes.
 
@@ -275,7 +415,7 @@ Each finished directory contains `summary.json`, `metrics.jsonl`, and `checkpoin
 ## What is next
 
 1. Run HellaSwag, ARC-Easy, and PIQA on the 100M checkpoints and on the two finished 200M checkpoints. The 25M and 50M scores are already stored. The 100M and 200M scores are not.
-2. Collect the family-law and criminal-law corpora, then pre-train Gemma 3, without the copy path, on that text. The general 5.0 billion token stage is done for Gemma 3 and LFM2.5. SFT and JEV have not started. The text-continuation command is already in `scripts/chat.py`; SFT is what would make those continuations answer questions.
+2. Monitor the two running H100 legal-to-SFT jobs described above and record their final results. The general 5.0 billion token stage is done for Gemma 3 and LFM2.5. Legal training is running; SFT and JEV have not started. The text-continuation command is already in `scripts/chat.py`; SFT is what would make those continuations answer questions.
 
 ## Read the repository in this order
 
@@ -455,3 +595,13 @@ What the code does:
 - `scripts/chat.py` encodes the first line with the same tokenizer call the data pipeline uses. Later lines are appended without a second beginning-of-text token. EOS is not kept in the running document, so the next line stays in the same text. On CUDA the forward pass uses BF16 autocast, matching training.
 
 The reading order is the section "Read the repository in this order" above.
+
+### Manifest recovery during launch
+
+The initial CPU preflight refused training because the legal entries were missing from the shared manifest after legal fetching and SFT preparation ran concurrently on separate Modal mount snapshots. All shard files remained intact. CPU app `ap-qLXJLQTCcIwa9w7YCIFCba` backed up the previous manifest at `/vol/data/manifest.before_legal_restore.json`, restored only the missing legal entries from the private Hugging Face reference manifest, confirmed the SFT entry was unchanged, and checksum-validated all four legal categories again. Run data-preparation apps to completion one at a time on a given Modal volume; local file locks do not coordinate separate mount snapshots. The retry passed preflight and both H100 jobs started successfully.
+
+To resume after the current app has stopped: `modal run --detach --profile abdulrehmanriaz299 scripts/modal_legal_training.py`. Preserved final general checkpoints stay separate from all legal/SFT outputs.
+
+### Status check — 22 October 2026
+
+No training containers are active. Modal explicitly rejected a CPU-only checkpoint diagnostic with `Workspace ac-DW3Nw2wztvmZYfeV0Cc3er has exceeded its spend limit`. Latest logged family progress: step 1,850/8,965 (20.64%), 969,932,800 tokens; criminal: step 1,760/8,965 (19.63%), 922,746,880 tokens. Last confirmed checkpoint events followed by further successful steps: family step 1,800 (943,718,400 tokens), criminal step 1,600 (838,860,800 tokens). Family held-out loss at step 1,800 was 1.8273, down from 2.8419 at initialization. Direct checkpoint inspection could not run because of the spending limit. SFT has not started. No billing settings were changed and no duplicate GPU jobs were launched. Resolve the workspace spending limit and inspect/stop the old detached app before submitting a resume; its call graph reports failed inputs while the app remains listed with zero tasks.

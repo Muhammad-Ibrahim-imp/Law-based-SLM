@@ -48,7 +48,7 @@ image = (
     .pip_install("transformers==5.17.0", "datasets==5.0.1", "huggingface_hub", "numpy", "pyarrow")
     .add_local_dir(ROOT, remote_path=REMOTE_ROOT, copy=True,
                    ignore=["dataset/**", "results/**", ".git/**", "**/*.pt", "**/*.bin", "**/*.pyc",
-                           "**/__pycache__/**", ".pytest_cache/**", "frontend/**"])
+                           "**/__pycache__/**", ".pytest_cache/**", "frontend/**", "scripts/data/**"])
     .env({"PYTHONPATH": REMOTE_ROOT})
 )
 app = modal.App("law-slm-build-sft", image=image)

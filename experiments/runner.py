@@ -14,6 +14,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from data.shard_dataset import ShardedTokenDataset
+from data.sft_dataset import SFTDataset
 from evaluation.validation import evaluate_validation
 from experiments.config import ExperimentConfig
 from experiments.data import StatefulBatchSampler
@@ -142,17 +143,27 @@ def run_training(
     log_path = output_dir / "metrics.jsonl"
     checkpoint_path = output_dir / "checkpoint.pt"
 
-    train_dataset = ShardedTokenDataset(
-        str(dataset_root), "general_train", config.sequence_length
-    )
-    validation_dataset = ShardedTokenDataset(
-        str(dataset_root), "general_validation", config.sequence_length
-    )
+    if config.sft:
+        sources = ("smol_smoltalk", "casehold", "lawinstruct", "reddit_domain")
+        mix = [(sources[0], "train")] + [(s, "train") for s in sources[1:]] * 2
+        train_dataset = SFTDataset(dataset_root, mix, config.sequence_length)
+        validation_dataset = SFTDataset(
+            dataset_root, [(s, "test") for s in sources], config.sequence_length
+        )
+        if config.target_train_tokens != len(train_dataset) * config.sequence_length:
+            raise ValueError("SFT budget must equal exactly one pass of the packed mix")
+    else:
+        train_dataset = ShardedTokenDataset(
+            str(dataset_root), config.train_category, config.sequence_length
+        )
+        validation_dataset = ShardedTokenDataset(
+            str(dataset_root), config.validation_category, config.sequence_length
+        )
     train_sampler = StatefulBatchSampler(
         len(train_dataset),
         config.micro_batch_size,
         config.seed,
-        drop_last=True,
+        drop_last=not config.sft,
     )
     train_loader = DataLoader(
         train_dataset,
@@ -170,6 +181,12 @@ def run_training(
     )
 
     base_model = build_experiment_model(config).to(device)
+    if config.initialize_from and not (resume and checkpoint_path.exists()):
+        from generation.load import _as_state_dict
+
+        initial = torch.load(config.initialize_from, map_location="cpu", weights_only=False)
+        base_model.load_state_dict(_as_state_dict(initial))
+        del initial
     trainable = CopyLM(base_model).to(device) if config.copy_mechanism else base_model
     model = torch.compile(trainable) if compile_model else trainable
     optimizer = adamw(
@@ -193,12 +210,18 @@ def run_training(
         device,
         config.max_grad_norm,
         config.gradient_accumulation_steps,
+        normalize_by_tokens=config.sft,
     )
     prior_train_seconds = 0.0
     if resume and checkpoint_path.exists():
         checkpoint = load_checkpoint(
             checkpoint_path, model, optimizer, scheduler, device
         )
+        saved_payload = dict(checkpoint["training_config"])
+        saved_payload["betas"] = tuple(saved_payload["betas"])
+        saved_config = ExperimentConfig(**saved_payload)
+        if config.initialize_from and asdict(saved_config) != asdict(config):
+            raise ValueError("resume config differs from the saved training config")
         trainer.global_step = checkpoint["global_step"]
         trainer.micro_step = checkpoint["micro_step"]
         runtime = checkpoint.get("runtime_state", {})
@@ -212,6 +235,7 @@ def run_training(
                     [state.cpu() for state in runtime["cuda_rng"]]
                 )
             prior_train_seconds = float(runtime.get("train_seconds", 0.0))
+        print(f"resume {config.name} step {trainer.global_step}", flush=True)
 
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
@@ -219,6 +243,10 @@ def run_training(
     train_seconds = prior_train_seconds
     running_loss = 0.0
     running_micro_steps = 0
+
+    def tokens_processed() -> int:
+        tokens = trainer.global_step * config.tokens_per_optimizer_step
+        return min(tokens, config.target_train_tokens) if config.sft else tokens
 
     def write_event(event: dict[str, object]) -> None:
         with log_path.open("a", encoding="utf-8") as handle:
@@ -267,7 +295,8 @@ def run_training(
             {
                 "event": "checkpoint",
                 "optimizer_step": trainer.global_step,
-                "tokens_seen": trainer.global_step * config.tokens_per_optimizer_step,
+                "tokens_seen": tokens_processed(),
+                "total_optimizer_steps": config.total_optimizer_steps,
                 "path": str(checkpoint_path),
             }
         )
@@ -284,7 +313,7 @@ def run_training(
         event = {
             "event": "validation",
             "optimizer_step": trainer.global_step,
-            "tokens_seen": trainer.global_step * config.tokens_per_optimizer_step,
+            "tokens_seen": tokens_processed(),
             **metrics,
         }
         write_event(event)
@@ -301,7 +330,8 @@ def run_training(
             batch = next(iterator)
 
         started = time.perf_counter()
-        result = trainer.train_step(batch)
+        last_batch = config.sft and trainer.micro_step + 1 == len(train_sampler)
+        result = trainer.train_step(batch, finish_accumulation=last_batch)
         if device.type == "cuda":
             torch.cuda.synchronize()
         train_seconds += time.perf_counter() - started
@@ -318,12 +348,14 @@ def run_training(
 
         step = trainer.global_step
         if step % config.log_every_steps == 0 or step == 1:
-            tokens_seen = step * config.tokens_per_optimizer_step
+            tokens_seen = tokens_processed()
             event = {
                 "event": "train",
                 "optimizer_step": step,
                 "micro_step": trainer.micro_step,
                 "tokens_seen": tokens_seen,
+                "total_optimizer_steps": config.total_optimizer_steps,
+                "progress_percent": 100 * step / config.total_optimizer_steps,
                 "loss": running_loss / running_micro_steps,
                 "grad_norm": float(result["grad_norm"]),
                 "learning_rate": scheduler.get_last_lr()[0],
@@ -340,7 +372,7 @@ def run_training(
 
     final_validation = validate()
     save()
-    tokens_seen = trainer.global_step * config.tokens_per_optimizer_step
+    tokens_seen = tokens_processed()
     summary = {
         "name": config.name,
         "architecture": config.architecture,

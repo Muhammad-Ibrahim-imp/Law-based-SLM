@@ -12,7 +12,7 @@ Sources:
 
 Local layers use a sliding-window causal mask. That mask cannot go through the
 flash-attention-only path the GQA model uses, so local layers use ordinary
-SDPA. Global layers still force flash attention on CUDA.
+SDPA. Global layers use flash attention on CUDA when the build provides it.
 The 270M depth pattern is kept (18 layers = three repeats of 5 local + 1
 global). Hidden size and FFN width are scaled so vocab 49,152 is near 200M.
 `head_dim` is not `d_model / n_heads`. Weights are float32.
@@ -162,7 +162,7 @@ def _attend(
             "enable_gqa": True,
             "scale": scale,
         }
-        if q.is_cuda:
+        if q.is_cuda and torch.backends.cuda.is_flash_attention_available():
             with sdpa_kernel(backends=[SDPBackend.FLASH_ATTENTION]):
                 return F.scaled_dot_product_attention(q, k, v, **args)
         return F.scaled_dot_product_attention(q, k, v, **args)
